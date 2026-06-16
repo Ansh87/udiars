@@ -18,6 +18,7 @@ const SF_PRESETS = [
 ];
 
 export default function ControlPanel({
+  mobile = false,
   onRouteCompute,
   onDemoStart,
   onDemoStop,
@@ -72,19 +73,17 @@ export default function ControlPanel({
 
   const labelStyle = { fontSize: 11, color: '#64748b', marginBottom: 3, display: 'block' };
 
+  const wrapStyle = mobile
+    ? { padding: '4px 0 8px' }
+    : {
+        position: 'absolute', top: 14, left: 14, zIndex: 1000,
+        width: 280, background: 'rgba(13,27,42,0.95)',
+        border: '1px solid #1e3a5c', borderRadius: 10,
+        padding: '14px 14px 10px', backdropFilter: 'blur(8px)',
+      };
+
   return (
-    <div style={{
-      position: 'absolute',
-      top: 14,
-      left: 14,
-      zIndex: 1000,
-      width: 280,
-      background: 'rgba(13,27,42,0.95)',
-      border: '1px solid #1e3a5c',
-      borderRadius: 10,
-      padding: '14px 14px 10px',
-      backdropFilter: 'blur(8px)',
-    }}>
+    <div style={wrapStyle}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
         <div style={{ flex: 1 }}>

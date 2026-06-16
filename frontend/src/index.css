@@ -1,4 +1,25 @@
 /* UDIARS Global Styles */
+
+/* Mobile viewport fix — prevents address bar from collapsing layout */
+html, body, #root {
+  height: 100%;
+  height: -webkit-fill-available;
+}
+
+@supports (height: 100dvh) {
+  html, body, #root { height: 100dvh; }
+}
+
+/* Prevent iOS double-tap zoom on buttons */
+button { touch-action: manipulation; }
+
+/* Better touch scrolling */
+* { -webkit-overflow-scrolling: touch; }
+
+/* Prevent text selection on UI elements */
+button, .badge { user-select: none; -webkit-user-select: none; }
+
+
 :root {
   --bg-primary:    #0d1b2a;
   --bg-secondary:  #1a2942;

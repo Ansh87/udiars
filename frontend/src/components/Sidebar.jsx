@@ -80,23 +80,19 @@ function RouteCard({ route, index, isDemo }) {
   );
 }
 
-export default function Sidebar({ tier, onTierChange, mhrm, hazards, routes, economic, demoState, lastUpdated, isConnected }) {
+export default function Sidebar({ tier, onTierChange, mhrm, hazards, routes, economic, demoState, lastUpdated, isConnected, mobile = false }) {
   const [activeTab, setActiveTab] = useState('hazards');
   const routeFeatures = routes?.features || [];
   const mhrmFeatures  = mhrm?.features   || [];
 
 
 
+  const outerStyle = mobile
+    ? { display: 'flex', flexDirection: 'column', overflow: 'hidden', height: '100%' }
+    : { width: 320, height: '100%', background: '#0d1b2a', borderLeft: '1px solid #1e3a5c', display: 'flex', flexDirection: 'column', overflow: 'hidden' };
+
   return (
-    <div style={{
-      width: 320,
-      height: '100%',
-      background: '#0d1b2a',
-      borderLeft: '1px solid #1e3a5c',
-      display: 'flex',
-      flexDirection: 'column',
-      overflow: 'hidden',
-    }}>
+    <div style={outerStyle}>
       {/* Header */}
       <div style={{ padding: '14px 16px 10px', borderBottom: '1px solid #1e3a5c', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
