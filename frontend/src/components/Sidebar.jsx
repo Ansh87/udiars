@@ -85,7 +85,7 @@ export default function Sidebar({ tier, onTierChange, mhrm, hazards, routes, eco
   const routeFeatures = routes?.features || [];
   const mhrmFeatures  = mhrm?.features   || [];
 
-  const highRiskSegs = mhrmFeatures.filter(f => f.properties.hazard_penalty >= 0.65);
+
 
   return (
     <div style={{

@@ -4,10 +4,9 @@
 import React from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend
+  PieChart, Pie, Cell
 } from 'recharts';
 
-const COLORS = ['#22c55e', '#eab308', '#f97316', '#ef4444', '#7c3aed'];
 const DAMAGE_COLORS = { None: '#22c55e', Slight: '#eab308', Moderate: '#f97316', Extensive: '#ef4444', Complete: '#7c3aed' };
 
 const fmt = (n) => n?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00';

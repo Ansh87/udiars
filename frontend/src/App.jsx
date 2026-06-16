@@ -21,7 +21,7 @@ export default function App() {
   });
 
   const {
-    mhrm, hazards, routes, economic, health, demoState,
+    mhrm, hazards, routes, economic, demoState,
     lastUpdated, loading, error,
     loadInitialData, handleWsMessage,
     computeRoutes, startDemo, stopDemo, forceRefresh,
