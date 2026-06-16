@@ -48,6 +48,27 @@ CA_HIGHWAY_SEGMENTS = [
     {"id": "I80-E2", "name": "I-80 (Berkeley→Sacramento)","lat": 38.25, "lon": -121.80, "highway": "I-80",  "direction": "E"},
 ]
 
+# New York highway segments for MHRM (representative corridors)
+NY_HIGHWAY_SEGMENTS = [
+    {"id": "NY-I95-1", "name": "I-95 (Cross Bronx Expwy)",       "lat": 40.8448, "lon": -73.8654, "highway": "I-95",   "direction": "E"},
+    {"id": "NY-I87-1", "name": "I-87 (Tappan Zee / Mario M. Cuomo Br)", "lat": 41.0700, "lon": -73.8740, "highway": "I-87",   "direction": "N"},
+    {"id": "NY-I87-2", "name": "I-87 (NY Thruway near Albany)",  "lat": 42.6526, "lon": -73.7562, "highway": "I-87",   "direction": "N"},
+    {"id": "NY-I278-1","name": "I-278 (Brooklyn-Queens Expwy)",  "lat": 40.6976, "lon": -73.9442, "highway": "I-278",  "direction": "N"},
+    {"id": "NY-I495-1","name": "Long Island Expwy (I-495)",      "lat": 40.7282, "lon": -73.7949, "highway": "I-495",  "direction": "E"},
+    {"id": "NY-HRP-1", "name": "Hutchinson River Pkwy",          "lat": 40.9115, "lon": -73.7846, "highway": "Hutch-Pkwy", "direction": "N"},
+    {"id": "NY-I90-1", "name": "I-90 (NY Thruway near Buffalo)", "lat": 42.9408, "lon": -78.7322, "highway": "I-90",   "direction": "W"},
+]
+
+# New Jersey highway segments for MHRM (representative corridors)
+NJ_HIGHWAY_SEGMENTS = [
+    {"id": "NJ-I95-1", "name": "NJ Turnpike (I-95, Newark)",     "lat": 40.7357, "lon": -74.1724, "highway": "I-95",   "direction": "N"},
+    {"id": "NJ-GSP-1", "name": "Garden State Pkwy (Woodbridge)", "lat": 40.5573, "lon": -74.2846, "highway": "GSP",    "direction": "N"},
+    {"id": "NJ-I80-1", "name": "I-80 (Paterson→Dover)",          "lat": 40.9168, "lon": -74.4060, "highway": "I-80",   "direction": "W"},
+    {"id": "NJ-I78-1", "name": "I-78 (Newark→Union)",            "lat": 40.6792, "lon": -74.3027, "highway": "I-78",   "direction": "W"},
+    {"id": "NJ-I280-1","name": "I-280 (Newark→East Orange)",     "lat": 40.7596, "lon": -74.2107, "highway": "I-280",  "direction": "W"},
+    {"id": "NJ-PulSky","name": "Pulaski Skyway / Route 1&9",     "lat": 40.7335, "lon": -74.0991, "highway": "US-1-9", "direction": "N"},
+]
+
 
 class CompoundHazardEngine:
     """Fuses all three hazard models into MHRM and computes HazardPenalty."""
@@ -78,7 +99,10 @@ class CompoundHazardEngine:
         # Build weather lookup by nearest point
         weather_lookup = {w["id"]: w for w in weather_data}
 
-        for seg in CA_HIGHWAY_SEGMENTS:
+        # Combine all supported states' highway segments (CA default + NY + NJ)
+        all_segments = CA_HIGHWAY_SEGMENTS + NY_HIGHWAY_SEGMENTS + NJ_HIGHWAY_SEGMENTS
+
+        for seg in all_segments:
             seg_lat, seg_lon = seg["lat"], seg["lon"]
 
             # ── FLOOD ──────────────────────────────────────────────────

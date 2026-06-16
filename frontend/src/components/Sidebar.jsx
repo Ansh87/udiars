@@ -6,8 +6,9 @@
  */
 import React, { useState } from 'react';
 import EconomicDashboard from './EconomicDashboard';
+import { TIER_INFO } from '../constants/appData';
 
-const TIER_LABELS = ['Driver', 'First Responder', 'Emergency Mgr'];
+const TIER_LABELS = TIER_INFO.map(t => t.label);
 
 const SHELTERS = [
   { name: 'LA Convention Center', lat: 34.0430, lng: -118.2673, type: 'Shelter', capacity: 5000 },
@@ -104,7 +105,7 @@ export default function Sidebar({ tier, onTierChange, mhrm, hazards, routes, eco
             {isConnected ? `LIVE · ${lastUpdated ? new Date(lastUpdated).toLocaleTimeString() : '--'}` : 'RECONNECTING…'}
           </span>
           {demoState?.active && (
-            <span className="badge badge-red pulse-red" style={{ marginLeft: 'auto' }}>DEMO</span>
+            <span className="badge badge-brown pulse-brown" style={{ marginLeft: 'auto' }}>DEMO</span>
           )}
         </div>
         {/* Tier selector */}
@@ -113,6 +114,7 @@ export default function Sidebar({ tier, onTierChange, mhrm, hazards, routes, eco
             <button
               key={i}
               onClick={() => onTierChange(i + 1)}
+              title={TIER_INFO[i].full}
               style={{
                 flex: 1,
                 padding: '5px 4px',
@@ -129,6 +131,9 @@ export default function Sidebar({ tier, onTierChange, mhrm, hazards, routes, eco
               T{i + 1} · {label}
             </button>
           ))}
+        </div>
+        <div style={{ fontSize: 10, color: '#64748b', marginTop: 5 }}>
+          {TIER_INFO[tier - 1]?.short}
         </div>
       </div>
 
@@ -323,7 +328,10 @@ export default function Sidebar({ tier, onTierChange, mhrm, hazards, routes, eco
             {activeTab === 'mhrm' && (
               <div>
                 <div className="card">
-                  <div className="card-title">🗺 Per-Segment Risk ({mhrmFeatures.length} segments)</div>
+                  <div className="card-title">🗺 Per-Segment Compound Risk ({mhrmFeatures.length} segments)</div>
+                  <div style={{ fontSize: 10, color: '#64748b', marginBottom: 6 }}>
+                    Combined score per road segment — worst of flood, wildfire &amp; seismic risk below it
+                  </div>
                   <div style={{ maxHeight: 400, overflowY: 'auto' }}>
                     {[...mhrmFeatures]
                       .sort((a, b) => b.properties.hazard_penalty - a.properties.hazard_penalty)
@@ -369,7 +377,7 @@ export default function Sidebar({ tier, onTierChange, mhrm, hazards, routes, eco
         color: '#475569',
         flexShrink: 0,
       }}>
-        UDIARS v1.0 POC · California · Data auto-refreshes every 60s
+        UDIARS v1.0 POC · CA · NY · NJ · Data auto-refreshes every 60s
       </div>
     </div>
   );

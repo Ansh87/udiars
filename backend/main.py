@@ -28,6 +28,32 @@ from fastapi.middleware.cors import CORSMiddleware
 
 load_dotenv()
 
+# ── Supported state regions ───────────────────────────────────────────────────
+# Bounding boxes / map defaults for all supported states. CA remains the default.
+STATE_BOUNDS = {
+    "CA": {
+        "name": "California",
+        "min_lat": 32.5, "max_lat": 42.1,
+        "min_lon": -124.5, "max_lon": -114.1,
+        "center": [37.0, -119.5],
+        "zoom": 6,
+    },
+    "NY": {
+        "name": "New York",
+        "min_lat": 40.4, "max_lat": 45.1,
+        "min_lon": -79.8, "max_lon": -71.7,
+        "center": [42.9, -75.5],
+        "zoom": 6,
+    },
+    "NJ": {
+        "name": "New Jersey",
+        "min_lat": 38.9, "max_lat": 41.4,
+        "min_lon": -75.6, "max_lon": -73.9,
+        "center": [40.1, -74.7],
+        "zoom": 8,
+    },
+}
+
 # ── Logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
@@ -400,6 +426,33 @@ async def health():
     }
 
 
+@app.get("/regions", tags=["Regions"])
+async def get_regions():
+    """
+    Supported state regions (California, New York, New Jersey) with bounding
+    boxes, map center, and default zoom — kept in sync with backend validation
+    so the frontend never needs to duplicate these constants.
+    """
+    return {
+        "default": "CA",
+        "regions": [
+            {
+                "id": state_id,
+                "name": b["name"],
+                "bbox": {
+                    "min_lat": b["min_lat"],
+                    "max_lat": b["max_lat"],
+                    "min_lon": b["min_lon"],
+                    "max_lon": b["max_lon"],
+                },
+                "center": b["center"],
+                "zoom": b["zoom"],
+            }
+            for state_id, b in STATE_BOUNDS.items()
+        ],
+    }
+
+
 @app.get("/mhrm", tags=["Hazards"])
 async def get_mhrm():
     """Current Multi-Hazard Risk Map as GeoJSON FeatureCollection."""
@@ -428,15 +481,20 @@ async def get_route(
     Returns GeoJSON FeatureCollection with hazard-penalized edge weights applied.
     Pre-emptive trigger fires if flood_prob > 0.65 on any primary segment.
     """
-    # Validate California bounding box
+    # Validate against supported state bounding boxes (CA, NY, NJ)
     for name, lat, lon in [
         ("origin", origin_lat, origin_lng),
         ("destination", dest_lat, dest_lng),
     ]:
-        if not (32.5 <= lat <= 42.1 and -124.5 <= lon <= -114.1):
+        in_any_state = any(
+            b["min_lat"] <= lat <= b["max_lat"] and b["min_lon"] <= lon <= b["max_lon"]
+            for b in STATE_BOUNDS.values()
+        )
+        if not in_any_state:
             raise HTTPException(
                 400,
-                f"{name} coordinates ({lat}, {lon}) are outside California bounds"
+                f"{name} coordinates ({lat}, {lon}) are outside supported regions "
+                f"(California, New York, New Jersey)"
             )
 
     routes = state.routing_engine.compute_routes(origin_lat, origin_lng, dest_lat, dest_lng)

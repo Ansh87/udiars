@@ -25,6 +25,20 @@ CA_WEATHER_POINTS = [
     {"id": "sb",    "name": "Santa Barbara",       "lat": 34.42,  "lon": -119.70},
 ]
 
+NY_WEATHER_POINTS = [
+    {"id": "ny_nyc",  "name": "New York City",       "lat": 40.71,  "lon": -74.01},
+    {"id": "ny_alb",  "name": "Albany",              "lat": 42.65,  "lon": -73.76},
+    {"id": "ny_buf",  "name": "Buffalo",             "lat": 42.89,  "lon": -78.88},
+    {"id": "ny_syr",  "name": "Syracuse",            "lat": 43.05,  "lon": -76.15},
+]
+
+NJ_WEATHER_POINTS = [
+    {"id": "nj_nwk",  "name": "Newark",              "lat": 40.74,  "lon": -74.17},
+    {"id": "nj_tre",  "name": "Trenton",             "lat": 40.22,  "lon": -74.76},
+    {"id": "nj_acy",  "name": "Atlantic City",       "lat": 39.36,  "lon": -74.42},
+    {"id": "nj_cam",  "name": "Camden",              "lat": 39.94,  "lon": -75.12},
+]
+
 
 class OpenMeteoClient:
     BASE_URL = "https://api.open-meteo.com/v1/forecast"
@@ -52,7 +66,7 @@ class OpenMeteoClient:
         results = []
         now = datetime.utcnow()
         async with httpx.AsyncClient(timeout=20) as client:
-            for pt in CA_WEATHER_POINTS:
+            for pt in CA_WEATHER_POINTS + NY_WEATHER_POINTS + NJ_WEATHER_POINTS:
                 params = {
                     "latitude": pt["lat"],
                     "longitude": pt["lon"],
@@ -90,7 +104,7 @@ class OpenMeteoClient:
         now = datetime.utcnow()
         # Diablo / Santa Ana wind conditions have higher wind speeds
         results = []
-        for pt in CA_WEATHER_POINTS:
+        for pt in CA_WEATHER_POINTS + NY_WEATHER_POINTS + NJ_WEATHER_POINTS:
             inland = pt["lon"] > -118.5
             wind = round(random.uniform(8, 35) if inland else random.uniform(3, 18), 1)
             temp = round(random.uniform(70, 105) if inland else random.uniform(55, 85), 1)

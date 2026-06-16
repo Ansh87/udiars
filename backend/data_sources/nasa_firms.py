@@ -31,6 +31,20 @@ CA_FIRE_ZONES = [
     {"name": "Six Rivers NF",     "lat": 41.05,  "lon": -123.70, "risk": "low"},
 ]
 
+# Known fire-risk areas in New York (upstate forests / Pine Barrens-adjacent)
+NY_FIRE_ZONES = [
+    {"name": "Adirondack Park",       "lat": 44.00, "lon": -74.30, "risk": "medium"},
+    {"name": "Catskill Park",         "lat": 42.10, "lon": -74.40, "risk": "medium"},
+    {"name": "Long Island Pine Barrens", "lat": 40.85, "lon": -72.75, "risk": "low"},
+]
+
+# Known fire-risk areas in New Jersey (Pine Barrens have real wildfire risk)
+NJ_FIRE_ZONES = [
+    {"name": "NJ Pine Barrens (Wharton SF)", "lat": 39.70, "lon": -74.55, "risk": "high"},
+    {"name": "NJ Pine Barrens (Bass River SF)", "lat": 39.62, "lon": -74.43, "risk": "medium"},
+    {"name": "Wawayanda SF (Highlands)", "lat": 41.18, "lon": -74.47, "risk": "low"},
+]
+
 
 class NASAFIRMSClient:
     BASE_URL = "https://firms.modaps.eosdis.nasa.gov/api/area/csv"
@@ -106,7 +120,8 @@ class NASAFIRMSClient:
         """Generate plausible synthetic fire detections around known fire zones."""
         now = datetime.utcnow()
         results = []
-        zones = [z for z in CA_FIRE_ZONES if z["risk"] in ("high", "medium")]
+        all_zones = CA_FIRE_ZONES + NY_FIRE_ZONES + NJ_FIRE_ZONES
+        zones = [z for z in all_zones if z["risk"] in ("high", "medium")]
         for _ in range(n_detections):
             zone = random.choice(zones)
             lat_off = random.uniform(-0.3, 0.3)

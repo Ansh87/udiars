@@ -26,6 +26,22 @@ CA_GAUGES = [
     {"site_no": "11458000", "name": "Russian R nr Guerneville", "lat": 38.5027, "lon": -123.0047},
 ]
 
+# Representative New York USGS stream gauges (site_no, name, lat, lon)
+NY_GAUGES = [
+    {"site_no": "01358000", "name": "Hudson R at Waterford", "lat": 42.7912, "lon": -73.6857},
+    {"site_no": "01335754", "name": "Hudson R at Hadley", "lat": 43.3320, "lon": -73.8312},
+    {"site_no": "01357500", "name": "Mohawk R at Cohoes", "lat": 42.7762, "lon": -73.7129},
+    {"site_no": "01362500", "name": "East Br Croton R (East River vicinity)", "lat": 41.3909, "lon": -73.6557},
+]
+
+# Representative New Jersey USGS stream gauges (site_no, name, lat, lon)
+NJ_GAUGES = [
+    {"site_no": "01389500", "name": "Passaic R at Little Falls", "lat": 40.8762, "lon": -74.2160},
+    {"site_no": "01377500", "name": "Hackensack R at NJ-17 Rochelle Park", "lat": 40.9082, "lon": -74.0710},
+    {"site_no": "01463500", "name": "Delaware R at Trenton", "lat": 40.2210, "lon": -74.7710},
+    {"site_no": "01396500", "name": "Raritan R at Manville", "lat": 40.5429, "lon": -74.5895},
+]
+
 
 class DataSourceStatus:
     def __init__(self):
@@ -58,7 +74,8 @@ class USGSNWISClient:
             return self._synthetic_data()
 
     async def _fetch_live(self) -> list[dict]:
-        site_ids = ",".join(g["site_no"] for g in CA_GAUGES)
+        all_gauges = CA_GAUGES + NY_GAUGES + NJ_GAUGES
+        site_ids = ",".join(g["site_no"] for g in all_gauges)
         params = {
             "format": "json",
             "sites": site_ids,
@@ -76,7 +93,7 @@ class USGSNWISClient:
 
         for ts in ts_series:
             site_code = ts["sourceInfo"]["siteCode"][0]["value"]
-            gauge_meta = next((g for g in CA_GAUGES if g["site_no"] == site_code), None)
+            gauge_meta = next((g for g in all_gauges if g["site_no"] == site_code), None)
             if not gauge_meta:
                 continue
 
@@ -113,10 +130,10 @@ class USGSNWISClient:
         return results
 
     def _synthetic_data(self) -> list[dict]:
-        """Realistic synthetic gauge readings for California."""
+        """Realistic synthetic gauge readings for California, New York, and New Jersey."""
         now = datetime.utcnow()
         results = []
-        for gauge in CA_GAUGES:
+        for gauge in CA_GAUGES + NY_GAUGES + NJ_GAUGES:
             # Random but realistic stage values; occasional high-stage spikes
             stage_ft = round(random.uniform(1.5, 8.0), 2)
             rate = round(random.uniform(-0.1, 0.4), 3)  # slight rising trend

@@ -8,6 +8,9 @@ import MapView       from './components/MapView';
 import Sidebar       from './components/Sidebar';
 import ControlPanel  from './components/ControlPanel';
 import AlertBanner   from './components/AlertBanner';
+import HelpModal     from './components/HelpModal';
+import TipsModal      from './components/TipsModal';
+import ReadMeModal   from './components/ReadMeModal';
 import useWebSocket  from './hooks/useWebSocket';
 import useHazardData from './hooks/useHazardData';
 import useIsMobile   from './hooks/useIsMobile';
@@ -25,6 +28,8 @@ export default function App() {
   const [tier, setTier]               = useState(2);
   const [mobileTab, setMobileTab]     = useState('map');
   const [sheetOpen, setSheetOpen]     = useState(false);
+  const [region, setRegion]           = useState('CA');
+  const [activeModal, setActiveModal] = useState(null); // 'help' | 'tips' | 'readme' | null
   const [hazardVisibility, setHazardVisibility] = useState({
     flood: true, wildfire: true, seismic: true, mhrm: true,
   });
@@ -55,8 +60,8 @@ export default function App() {
       f => f.properties?.hazard_penalty >= 0.65
     ).length || 0;
     document.title = critCount > 0
-      ? `⚠️ (${critCount}) UDIARS — California`
-      : 'UDIARS — California Multi-Hazard';
+      ? `⚠️ (${critCount}) UDIARS — CA/NY/NJ`
+      : 'UDIARS — Multi-State Hazard POC';
   }, [mhrm]);
 
   // ── MOBILE LAYOUT ──────────────────────────────────────────────────────────
@@ -72,7 +77,7 @@ export default function App() {
 
         {/* Full-screen map */}
         <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-          <MapView mhrm={mhrm} routes={routes} hazardVisibility={hazardVisibility} />
+          <MapView mhrm={mhrm} routes={routes} hazardVisibility={hazardVisibility} region={region} />
 
           {/* Status chip top-right */}
           <div style={{
@@ -80,7 +85,7 @@ export default function App() {
             display: 'flex', gap: 6, alignItems: 'center',
           }}>
             {demoState?.active && (
-              <span className="badge badge-red pulse-red" style={{ fontSize: 10 }}>DEMO</span>
+              <span className="badge badge-brown pulse-brown" style={{ fontSize: 10 }}>DEMO</span>
             )}
             <div style={{
               background: 'rgba(13,27,42,0.88)',
@@ -177,6 +182,11 @@ export default function App() {
                     hazardVisibility={hazardVisibility}
                     isConnected={isConnected}
                     lastUpdated={lastUpdated}
+                    region={region}
+                    onRegionChange={setRegion}
+                    onOpenHelp={() => setActiveModal('help')}
+                    onOpenTips={() => setActiveModal('tips')}
+                    onOpenReadMe={() => setActiveModal('readme')}
                     mobile
                   />
                 </div>
@@ -218,6 +228,10 @@ export default function App() {
             );
           })}
         </div>
+
+        {activeModal === 'help'   && <HelpModal   onClose={() => setActiveModal(null)} mobile />}
+        {activeModal === 'tips'   && <TipsModal   onClose={() => setActiveModal(null)} mobile />}
+        {activeModal === 'readme' && <ReadMeModal onClose={() => setActiveModal(null)} mobile />}
       </div>
     );
   }
@@ -229,7 +243,7 @@ export default function App() {
 
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden', position: 'relative' }}>
         <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-          <MapView mhrm={mhrm} routes={routes} hazardVisibility={hazardVisibility} />
+          <MapView mhrm={mhrm} routes={routes} hazardVisibility={hazardVisibility} region={region} />
 
           <ControlPanel
             onRouteCompute={computeRoutes}
@@ -241,6 +255,11 @@ export default function App() {
             hazardVisibility={hazardVisibility}
             isConnected={isConnected}
             lastUpdated={lastUpdated}
+            region={region}
+            onRegionChange={setRegion}
+            onOpenHelp={() => setActiveModal('help')}
+            onOpenTips={() => setActiveModal('tips')}
+            onOpenReadMe={() => setActiveModal('readme')}
           />
 
           {loading && (
@@ -259,9 +278,9 @@ export default function App() {
             </div>
           )}
           {mhrm?.metadata && (
-            <div style={{ position: 'absolute', bottom: 12, right: 14, background: 'rgba(13,27,42,0.85)', border: '1px solid #1e3a5c', borderRadius: 6, padding: '4px 10px', fontSize: 10, color: '#475569', zIndex: 750, textAlign: 'right' }}>
-              MHRM · {mhrm.metadata.n_segments} segs · {mhrm.metadata.n_fire_detections} fires · {mhrm.metadata.n_earthquakes} EQs<br />
-              {mhrm.metadata.updated_at ? new Date(mhrm.metadata.updated_at).toLocaleTimeString() : '--'}
+            <div style={{ position: 'absolute', bottom: 12, right: 14, background: 'rgba(13,27,42,0.92)', border: '1px solid #2d4a6e', borderRadius: 6, padding: '4px 10px', fontSize: 10, color: '#cbd5e1', zIndex: 750, textAlign: 'right' }}>
+              MHRM (compound risk model) · {mhrm.metadata.n_segments} segs · {mhrm.metadata.n_fire_detections} fires · {mhrm.metadata.n_earthquakes} EQs<br />
+              Updated: {mhrm.metadata.updated_at ? new Date(mhrm.metadata.updated_at).toLocaleTimeString() : '--'}
             </div>
           )}
         </div>
@@ -272,6 +291,10 @@ export default function App() {
           demoState={demoState} lastUpdated={lastUpdated} isConnected={isConnected}
         />
       </div>
+
+      {activeModal === 'help'   && <HelpModal   onClose={() => setActiveModal(null)} mobile={isMobile} />}
+      {activeModal === 'tips'   && <TipsModal   onClose={() => setActiveModal(null)} mobile={isMobile} />}
+      {activeModal === 'readme' && <ReadMeModal onClose={() => setActiveModal(null)} mobile={isMobile} />}
     </div>
   );
 }

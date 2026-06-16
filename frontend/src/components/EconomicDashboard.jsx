@@ -21,6 +21,7 @@ export default function EconomicDashboard({ economic }) {
   }
 
   const { summary, bridge_damage = [], highway_closures = [] } = economic;
+  const hasImpact = (summary?.grand_total_loss_m || 0) > 0 || bridge_damage.length > 0 || highway_closures.length > 0;
 
   // Bar chart data — top 8 closure costs
   const closureChartData = [...highway_closures]
@@ -41,6 +42,18 @@ export default function EconomicDashboard({ economic }) {
 
   return (
     <div style={{ fontSize: 12 }}>
+      <div style={{ color: '#64748b', fontSize: 11, marginBottom: 10, lineHeight: 1.4 }}>
+        💰 Estimated infrastructure losses — highway closure costs and bridge damage (HAZUS-MH-style
+        fragility curves) — driven by current hazard levels. Updates automatically as hazards change.
+      </div>
+
+      {!hasImpact && (
+        <div className="card" style={{ textAlign: 'center', color: '#86efac', background: 'rgba(34,197,94,0.08)', padding: '14px 12px' }}>
+          ✅ No significant economic impact currently — hazard levels are below the loss-estimation
+          threshold. Try "Demo: LA-101 Flood" to see this dashboard populate.
+        </div>
+      )}
+
       {/* Summary metrics */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
         {[

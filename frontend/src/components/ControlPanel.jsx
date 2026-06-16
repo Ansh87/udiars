@@ -2,20 +2,18 @@
  * ControlPanel — origin/destination geocoder, hazard toggles, demo controls.
  */
 import React, { useState } from 'react';
+import StateSelector from './StateSelector';
+import { PRESET_GROUPS } from '../constants/appData';
 
-// Quick location presets for demo
-const LA_PRESETS = [
-  { label: 'LA Union Station',  lat: 34.0560, lng: -118.2356 },
-  { label: 'Santa Monica Pier', lat: 34.0085, lng: -118.4985 },
-  { label: 'LAX Airport',       lat: 33.9425, lng: -118.4081 },
-  { label: 'Pasadena City Hall',lat: 34.1478, lng: -118.1445 },
-];
-const SF_PRESETS = [
-  { label: 'SF Civic Center',   lat: 37.7793, lng: -122.4193 },
-  { label: 'SFO Airport',       lat: 37.6213, lng: -122.3790 },
-  { label: 'Oakland City Hall', lat: 37.8044, lng: -122.2711 },
-  { label: 'Berkeley UC',       lat: 37.8724, lng: -122.2595 },
-];
+async function geocodeAddress(query) {
+  if (!query || query.trim().length < 3) return null;
+  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`;
+  const res = await fetch(url, { headers: { Accept: 'application/json' } });
+  if (!res.ok) throw new Error('Geocoding service unavailable');
+  const data = await res.json();
+  if (!data?.length) return null;
+  return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), display: data[0].display_name };
+}
 
 export default function ControlPanel({
   mobile = false,
@@ -28,11 +26,19 @@ export default function ControlPanel({
   hazardVisibility,
   isConnected,
   lastUpdated,
+  region,
+  onRegionChange,
+  onOpenHelp,
+  onOpenTips,
+  onOpenReadMe,
 }) {
   const [originLat,  setOriginLat]  = useState('34.0560');
   const [originLng,  setOriginLng]  = useState('-118.2356');
   const [destLat,    setDestLat]    = useState('34.0195');
   const [destLng,    setDestLng]    = useState('-118.4912');
+  const [originAddr, setOriginAddr] = useState('');
+  const [destAddr,   setDestAddr]   = useState('');
+  const [geoStatus,  setGeoStatus]  = useState({ origin: '', dest: '' });
   const [computing,  setComputing]  = useState(false);
   const [showPresets, setShowPresets] = useState(false);
   const [presetMode, setPresetMode]  = useState('origin');
@@ -46,6 +52,38 @@ export default function ControlPanel({
       );
     } finally {
       setComputing(false);
+    }
+  };
+
+  const handleGeocode = async (which) => {
+    const query = which === 'origin' ? originAddr : destAddr;
+    setGeoStatus(s => ({ ...s, [which]: 'Searching…' }));
+    try {
+      const result = await geocodeAddress(query);
+      if (!result) {
+        setGeoStatus(s => ({ ...s, [which]: 'No match found' }));
+        return;
+      }
+      if (which === 'origin') {
+        setOriginLat(result.lat.toFixed(6));
+        setOriginLng(result.lng.toFixed(6));
+      } else {
+        setDestLat(result.lat.toFixed(6));
+        setDestLng(result.lng.toFixed(6));
+      }
+      setGeoStatus(s => ({ ...s, [which]: '✓ Found' }));
+    } catch (err) {
+      setGeoStatus(s => ({ ...s, [which]: 'Lookup failed' }));
+    }
+  };
+
+  // Clicking the same mode again toggles the list closed; switching mode keeps it open.
+  const togglePresetMode = (mode) => {
+    if (presetMode === mode && showPresets) {
+      setShowPresets(false);
+    } else {
+      setPresetMode(mode);
+      setShowPresets(true);
     }
   };
 
@@ -77,24 +115,28 @@ export default function ControlPanel({
     ? { padding: '4px 0 8px' }
     : {
         position: 'absolute', top: 14, left: 14, zIndex: 1000,
-        width: 280, background: 'rgba(13,27,42,0.95)',
+        width: 290, background: 'rgba(13,27,42,0.95)',
         border: '1px solid #1e3a5c', borderRadius: 10,
         padding: '14px 14px 10px', backdropFilter: 'blur(8px)',
+        maxHeight: 'calc(100vh - 28px)', overflowY: 'auto',
       };
 
   return (
     <div style={wrapStyle}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 10 }}>
         <div style={{ flex: 1 }}>
           <div style={{ fontWeight: 700, fontSize: 15, letterSpacing: '0.02em' }}>
             🛡 UDIARS
           </div>
+          <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 1 }}>
+            Unified Disaster Intelligence &amp; Adaptive Response System
+          </div>
           <div style={{ fontSize: 10, color: '#475569', marginTop: 1 }}>
-            California Multi-Hazard POC
+            POC Region: California, New York and New Jersey
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
           <div style={{
             width: 7, height: 7, borderRadius: '50%',
             background: isConnected ? '#22c55e' : '#ef4444',
@@ -105,8 +147,38 @@ export default function ControlPanel({
         </div>
       </div>
 
+      {/* Region selector + info buttons */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 10, alignItems: 'center' }}>
+        <span style={{ fontSize: 11, color: '#64748b' }}>State:</span>
+        <StateSelector value={region} onChange={onRegionChange} compact />
+        <div style={{ flex: 1 }} />
+        <button onClick={onOpenHelp} className="btn btn-secondary" title="Emergency hotlines" style={{ fontSize: 11, padding: '4px 8px' }}>📞 Help</button>
+        <button onClick={onOpenTips} className="btn btn-secondary" title="Emergency tips" style={{ fontSize: 11, padding: '4px 8px' }}>🧭 Tips</button>
+        <button onClick={onOpenReadMe} className="btn btn-secondary" title="How this app works" style={{ fontSize: 11, padding: '4px 8px' }}>📖</button>
+      </div>
+
       {/* Routing inputs */}
       <div style={{ marginBottom: 10 }}>
+        {/* Address search */}
+        <div style={{ marginBottom: 6 }}>
+          <label style={labelStyle}>Origin Address (search)</label>
+          <div style={{ display: 'flex', gap: 4 }}>
+            <input value={originAddr} onChange={e => setOriginAddr(e.target.value)} style={inputStyle} placeholder="e.g. 123 Main St, Los Angeles, CA"
+              onKeyDown={e => { if (e.key === 'Enter') handleGeocode('origin'); }} />
+            <button onClick={() => handleGeocode('origin')} className="btn btn-secondary" style={{ fontSize: 11, padding: '5px 8px' }}>🔍</button>
+          </div>
+          {geoStatus.origin && <div style={{ fontSize: 10, color: '#64748b', marginTop: 2 }}>{geoStatus.origin}</div>}
+        </div>
+        <div style={{ marginBottom: 8 }}>
+          <label style={labelStyle}>Destination Address (search)</label>
+          <div style={{ display: 'flex', gap: 4 }}>
+            <input value={destAddr} onChange={e => setDestAddr(e.target.value)} style={inputStyle} placeholder="e.g. LAX Airport"
+              onKeyDown={e => { if (e.key === 'Enter') handleGeocode('dest'); }} />
+            <button onClick={() => handleGeocode('dest')} className="btn btn-secondary" style={{ fontSize: 11, padding: '5px 8px' }}>🔍</button>
+          </div>
+          {geoStatus.dest && <div style={{ fontSize: 10, color: '#64748b', marginTop: 2 }}>{geoStatus.dest}</div>}
+        </div>
+
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 6 }}>
           <div>
             <label style={labelStyle}>Origin Lat</label>
@@ -131,9 +203,13 @@ export default function ControlPanel({
           {['origin', 'dest'].map(mode => (
             <button
               key={mode}
-              onClick={() => { setPresetMode(mode); setShowPresets(!showPresets); }}
+              type="button"
+              onClick={() => togglePresetMode(mode)}
               className="btn btn-secondary"
-              style={{ flex: 1, fontSize: 11 }}
+              style={{
+                flex: 1, fontSize: 11,
+                outline: presetMode === mode && showPresets ? '1px solid #3b82f6' : 'none',
+              }}
             >
               📍 {mode === 'origin' ? 'Origin' : 'Dest'} Presets
             </button>
@@ -151,24 +227,17 @@ export default function ControlPanel({
             <div style={{ fontSize: 10, color: '#64748b', marginBottom: 6 }}>
               SET {presetMode.toUpperCase()} →
             </div>
-            <div style={{ marginBottom: 8 }}>
-              <div style={{ fontSize: 11, color: '#3b82f6', marginBottom: 4 }}>Los Angeles</div>
-              {LA_PRESETS.map(p => (
-                <button key={p.label} onClick={() => applyPreset(p)}
-                  style={{ display: 'block', width: '100%', textAlign: 'left', background: 'transparent', border: 'none', color: '#94a3b8', fontSize: 11, padding: '3px 0', cursor: 'pointer' }}>
-                  → {p.label}
-                </button>
-              ))}
-            </div>
-            <div>
-              <div style={{ fontSize: 11, color: '#3b82f6', marginBottom: 4 }}>San Francisco</div>
-              {SF_PRESETS.map(p => (
-                <button key={p.label} onClick={() => applyPreset(p)}
-                  style={{ display: 'block', width: '100%', textAlign: 'left', background: 'transparent', border: 'none', color: '#94a3b8', fontSize: 11, padding: '3px 0', cursor: 'pointer' }}>
-                  → {p.label}
-                </button>
-              ))}
-            </div>
+            {PRESET_GROUPS.map(group => (
+              <div key={group.label} style={{ marginBottom: 8 }}>
+                <div style={{ fontSize: 11, color: '#3b82f6', marginBottom: 4 }}>{group.label} ({group.region})</div>
+                {group.items.map(p => (
+                  <button key={p.label} type="button" onClick={() => applyPreset(p)}
+                    style={{ display: 'block', width: '100%', textAlign: 'left', background: 'transparent', border: 'none', color: '#94a3b8', fontSize: 11, padding: '3px 0', cursor: 'pointer' }}>
+                    → {p.label}
+                  </button>
+                ))}
+              </div>
+            ))}
           </div>
         )}
 
@@ -245,7 +314,7 @@ export default function ControlPanel({
         </div>
         {demoState?.active && (
           <div style={{ marginTop: 6, fontSize: 11, color: '#fca5a5', padding: '5px 8px', background: 'rgba(127,29,29,0.3)', borderRadius: 5 }}>
-            🔴 Demo active: LA-101 flood scenario running
+            🟤 Demo active: LA-101 flood scenario running
           </div>
         )}
         {lastUpdated && (

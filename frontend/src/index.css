@@ -79,6 +79,7 @@ body {
 .badge-red     { background: rgba(239,68,68,.2);  color: #f87171; }
 .badge-blue    { background: rgba(59,130,246,.2); color: #60a5fa; }
 .badge-purple  { background: rgba(168,85,247,.2); color: #c084fc; }
+.badge-brown   { background: rgba(146,90,42,.28); color: #d9a066; }
 
 /* Animation */
 @keyframes pulse-red {
@@ -86,6 +87,17 @@ body {
   50%       { box-shadow: 0 0 0 8px rgba(239,68,68,0); }
 }
 .pulse-red { animation: pulse-red 1.5s ease-in-out infinite; }
+
+@keyframes pulse-brown {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(154,98,46,.55); }
+  50%       { box-shadow: 0 0 0 8px rgba(154,98,46,0); }
+}
+.pulse-brown { animation: pulse-brown 1.5s ease-in-out infinite; }
+
+/* Bright, high-contrast map place labels (CartoDB dark_only_labels overlay) */
+.bright-map-labels {
+  filter: brightness(3) contrast(1.15);
+}
 
 @keyframes blink {
   0%, 100% { opacity: 1; }

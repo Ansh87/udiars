@@ -8,8 +8,17 @@ import React, { useState } from 'react';
 const SEVERITY_STYLES = {
   immediate: { bg: '#7f1d1d', border: '#ef4444', icon: '🚨', label: 'IMMEDIATE' },
   warning:   { bg: '#7c2d12', border: '#f97316', icon: '⚠️',  label: 'WARNING'   },
-  watch:     { bg: '#713f12', border: '#eab308', icon: '📡', label: 'WATCH'     },
+  watch:     { bg: '#450a0a', border: '#dc2626', icon: '📡', label: 'WATCH'     },
 };
+
+function formatOccurred(ts) {
+  if (!ts) return null;
+  try {
+    return new Date(ts).toLocaleString();
+  } catch (_) {
+    return null;
+  }
+}
 
 export default function AlertBanner({ demoState, hazards, routes, compact = false }) {
   const [dismissed, setDismissed] = useState([]);
@@ -34,12 +43,13 @@ export default function AlertBanner({ demoState, hazards, routes, compact = fals
     }
   }
 
-  // Hazard-based alerts
+  // Hazard-based alerts (timestamp = when this condition was detected)
   if (hazards?.flood?.high_risk_segments > 0) {
     alerts.push({
       id:       'flood_segments',
       severity: 'warning',
       message:  `🌊 ${hazards.flood.high_risk_segments} road segment(s) at HIGH flood risk (P > 0.65)`,
+      timestamp: hazards.updated_at || new Date().toISOString(),
     });
   }
   if (hazards?.wildfire?.zone_a_segments > 0) {
@@ -47,13 +57,15 @@ export default function AlertBanner({ demoState, hazards, routes, compact = fals
       id:       'wildfire_zone_a',
       severity: 'warning',
       message:  `🔥 ${hazards.wildfire.zone_a_segments} segment(s) in wildfire Zone A (within 2 miles of active fire)`,
+      timestamp: hazards.updated_at || new Date().toISOString(),
     });
   }
   if (hazards?.seismic?.significant_eqs > 0) {
     alerts.push({
       id:       'seismic',
       severity: 'watch',
-      message:  `🌍 ${hazards.seismic.significant_eqs} significant earthquake(s) (M4.0+) detected in California`,
+      message:  `🌍 ${hazards.seismic.significant_eqs} significant earthquake(s) (M4.0+) detected`,
+      timestamp: hazards.updated_at || new Date().toISOString(),
     });
   }
 
@@ -81,6 +93,9 @@ export default function AlertBanner({ demoState, hazards, routes, compact = fals
         </span>
         <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {top.message}
+          {formatOccurred(top.timestamp) && (
+            <span style={{ color: '#cbd5e1', opacity: 0.8 }}> · {formatOccurred(top.timestamp)}</span>
+          )}
         </span>
         {visible.length > 1 && (
           <span style={{ color: '#fcd34d', fontSize: 10, flexShrink: 0 }}>+{visible.length - 1}</span>
@@ -102,7 +117,12 @@ export default function AlertBanner({ demoState, hazards, routes, compact = fals
             <span style={{ background: sev.border, color: '#fff', fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, letterSpacing: '0.08em', whiteSpace: 'nowrap', flexShrink: 0 }}>
               {sev.label}
             </span>
-            <span style={{ flex: 1 }}>{alert.message}</span>
+            <span style={{ flex: 1 }}>
+              {alert.message}
+              {formatOccurred(alert.timestamp) && (
+                <span style={{ color: '#cbd5e1', fontSize: 11, opacity: 0.85 }}> · Occurred: {formatOccurred(alert.timestamp)}</span>
+              )}
+            </span>
             {alert.action && (
               <span style={{ color: '#fcd34d', fontSize: 12, flexShrink: 0 }}>→ {alert.action}</span>
             )}

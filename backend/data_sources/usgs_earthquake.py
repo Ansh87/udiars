@@ -26,6 +26,18 @@ CA_FAULT_ZONES = [
     {"name": "Rodgers Creek Fault",    "lat": 38.30, "lon": -122.60, "max_mag": 7.0},
 ]
 
+# Known fault zones in New York (lower seismicity; Ramapo Fault system)
+NY_FAULT_ZONES = [
+    {"name": "Ramapo Fault (NY)",      "lat": 41.30, "lon": -74.15, "max_mag": 5.0},
+    {"name": "Dobbs Ferry / Lower Hudson Seismic Zone", "lat": 41.01, "lon": -73.87, "max_mag": 4.5},
+]
+
+# Known fault zones in New Jersey (lower seismicity; Ramapo Fault system)
+NJ_FAULT_ZONES = [
+    {"name": "Ramapo Fault (NJ)",      "lat": 41.05, "lon": -74.40, "max_mag": 5.0},
+    {"name": "Central NJ Seismic Zone", "lat": 40.45, "lon": -74.55, "max_mag": 4.2},
+]
+
 
 class USGSEarthquakeClient:
     BASE_URL = "https://earthquake.usgs.gov/fdsnws/event/1/query"
@@ -97,8 +109,9 @@ class USGSEarthquakeClient:
     def _synthetic_data(self, min_mag: float = 2.5, n: int = 8) -> list[dict]:
         now = datetime.utcnow()
         results = []
+        all_faults = CA_FAULT_ZONES + NY_FAULT_ZONES + NJ_FAULT_ZONES
         for _ in range(n):
-            fault = random.choice(CA_FAULT_ZONES)
+            fault = random.choice(all_faults)
             mag = round(random.uniform(min_mag, min(fault["max_mag"], 5.5)), 1)
             depth = round(random.uniform(3.0, 25.0), 1)
             lat = round(fault["lat"] + random.uniform(-0.5, 0.5), 4)

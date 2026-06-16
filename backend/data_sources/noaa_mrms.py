@@ -27,6 +27,22 @@ CA_RAIN_POINTS = [
     {"id": "ca_eur",    "name": "Eureka / NorCal",      "lat": 40.80,  "lon": -124.16},
 ]
 
+# New York rainfall reference points (lat, lon, label)
+NY_RAIN_POINTS = [
+    {"id": "ny_nyc",    "name": "New York City",        "lat": 40.71,  "lon": -74.01},
+    {"id": "ny_alb",    "name": "Albany",               "lat": 42.65,  "lon": -73.76},
+    {"id": "ny_buf",    "name": "Buffalo",               "lat": 42.89,  "lon": -78.88},
+    {"id": "ny_syr",    "name": "Syracuse",              "lat": 43.05,  "lon": -76.15},
+]
+
+# New Jersey rainfall reference points (lat, lon, label)
+NJ_RAIN_POINTS = [
+    {"id": "nj_nwk",    "name": "Newark",                "lat": 40.74,  "lon": -74.17},
+    {"id": "nj_tre",    "name": "Trenton",                "lat": 40.22,  "lon": -74.76},
+    {"id": "nj_acy",    "name": "Atlantic City",          "lat": 39.36,  "lon": -74.42},
+    {"id": "nj_cam",    "name": "Camden",                 "lat": 39.94,  "lon": -75.12},
+]
+
 
 class NOAAMRMSClient:
     # Open-Meteo provides real-time precipitation; use as MRMS proxy
@@ -55,9 +71,9 @@ class NOAAMRMSClient:
         results = []
         now = datetime.utcnow()
 
-        # Batch calls: fetch precipitation for all points
+        # Batch calls: fetch precipitation for all points (CA + NY + NJ)
         async with httpx.AsyncClient(timeout=20) as client:
-            for pt in CA_RAIN_POINTS:
+            for pt in CA_RAIN_POINTS + NY_RAIN_POINTS + NJ_RAIN_POINTS:
                 params = {
                     "latitude": pt["lat"],
                     "longitude": pt["lon"],
@@ -94,7 +110,7 @@ class NOAAMRMSClient:
     def _synthetic_data(self) -> list[dict]:
         now = datetime.utcnow()
         results = []
-        for pt in CA_RAIN_POINTS:
+        for pt in CA_RAIN_POINTS + NY_RAIN_POINTS + NJ_RAIN_POINTS:
             r1 = round(random.uniform(0.0, 0.8), 3)
             r6 = round(r1 * random.uniform(3.5, 6.5), 3)
             results.append({

@@ -13,6 +13,7 @@
 import React, { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { STATE_CONFIG } from '../constants/appData';
 
 // Fix Leaflet's default icon paths broken by webpack
 delete L.Icon.Default.prototype._getIconUrl;
@@ -22,10 +23,10 @@ L.Icon.Default.mergeOptions({
   shadowUrl:     'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 });
 
-const CA_CENTER = [37.0, -119.5];
-const CA_ZOOM   = 6;
+const CA_CENTER = STATE_CONFIG.CA.center;
+const CA_ZOOM   = STATE_CONFIG.CA.zoom;
 
-export default function MapView({ mhrm, routes, hazardVisibility }) {
+export default function MapView({ mhrm, routes, hazardVisibility, region }) {
   const mapRef       = useRef(null);
   const leafletRef   = useRef(null);
   const layersRef    = useRef({
@@ -47,13 +48,29 @@ export default function MapView({ mhrm, routes, hazardVisibility }) {
       attributionControl: true,
     });
 
-    // Dark tile layer (Stadia / CartoDB Dark Matter)
+    // Dark basemap WITHOUT labels, so we can overlay bright labels on top
     L.tileLayer(
-      'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+      'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',
       {
         attribution: '©OpenStreetMap ©CartoDB',
         subdomains: 'abcd',
         maxZoom: 18,
+      }
+    ).addTo(map);
+
+    // Dedicated high-zIndex pane for labels so they always stay legible above markers
+    const labelsPane = map.createPane('labelsPane');
+    labelsPane.style.zIndex = 650;
+    labelsPane.style.pointerEvents = 'none';
+
+    // Bright city/place name labels overlay (brightness-boosted via CSS filter)
+    L.tileLayer(
+      'https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png',
+      {
+        subdomains: 'abcd',
+        maxZoom: 18,
+        pane: 'labelsPane',
+        className: 'bright-map-labels',
       }
     ).addTo(map);
 
@@ -69,9 +86,11 @@ export default function MapView({ mhrm, routes, hazardVisibility }) {
         font-size: 12px;
         color: #e2e8f0;
         line-height: 1.8;
+        max-width: 220px;
       `;
       div.innerHTML = `
-        <b style="font-size:11px;letter-spacing:.08em;color:#94a3b8">RISK LEVEL</b><br>
+        <b style="font-size:11px;letter-spacing:.08em;color:#94a3b8">COMPOUND RISK LEVEL</b><br>
+        <span style="font-size:10px;color:#64748b">Combined score per road segment: worst of flood + wildfire + seismic risk</span><br>
         <span style="color:#22c55e">●</span> Low (&lt;15%)<br>
         <span style="color:#eab308">●</span> Medium (15–35%)<br>
         <span style="color:#f97316">●</span> High (35–65%)<br>
@@ -92,6 +111,19 @@ export default function MapView({ mhrm, routes, hazardVisibility }) {
       leafletRef.current = null;
     };
   }, []);
+
+  // Zoom/pan to selected state
+  useEffect(() => {
+    const map = leafletRef.current;
+    if (!map || !region) return;
+    const cfg = STATE_CONFIG[region];
+    if (!cfg) return;
+    try {
+      map.fitBounds(cfg.bounds, { padding: [20, 20] });
+    } catch (_) {
+      map.setView(cfg.center, cfg.zoom);
+    }
+  }, [region]);
 
   // MHRM overlay
   useEffect(() => {
@@ -145,7 +177,8 @@ export default function MapView({ mhrm, routes, hazardVisibility }) {
             <b>${p.name}</b><br>
             <span style="color:#94a3b8">Highway:</span> ${p.highway} · ${p.direction}<br>
             <hr style="border-color:#334">
-            <b style="color:${p.risk_color}">Risk Level: ${(hp*100).toFixed(0)}% (${p.risk_level?.toUpperCase()})</b><br>
+            <b style="color:${p.risk_color}">Compound Risk: ${(hp*100).toFixed(0)}% (${p.risk_level?.toUpperCase()})</b><br>
+            <span style="color:#64748b;font-size:10px">= worst of flood / wildfire / seismic below</span><br>
             <span style="color:#60a5fa">🌊 Flood:</span> ${(p.flood_probability*100).toFixed(1)}% · Stage: ${p.stage_ft}ft<br>
             <span style="color:#fb923c">🔥 Wildfire:</span> Zone ${p.wildfire_zone || 'none'} · ${p.dist_to_fire_km}km to fire<br>
             <span style="color:#c084fc">🌍 Seismic:</span> PGA ${p.seismic_pga_g}g · ${p.seismic_damage}<br>

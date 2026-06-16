@@ -38,8 +38,12 @@ class SeismicModel:
     """PGA-based bridge fragility and ground shaking probability model."""
 
     def __init__(self):
-        # Synthetic bridge inventory (NBI subset for CA POC)
-        self.bridges = self._synthetic_bridge_inventory()
+        # Synthetic bridge inventory (NBI subset for CA + NY + NJ POC)
+        self.bridges = (
+            self._synthetic_bridge_inventory()
+            + self._ny_bridge_inventory()
+            + self._nj_bridge_inventory()
+        )
         self._trained = True  # no ML training needed — physics-based
 
     # ------------------------------------------------------------------
@@ -181,4 +185,23 @@ class SeismicModel:
             {"id": "B013", "name": "I-80 / American River",      "lat": 38.5816, "lon": -121.4944, "type": "HWB2", "year_built": 1972},
             {"id": "B014", "name": "Hwy-1 / Russian River",      "lat": 38.4283, "lon": -123.1118, "type": "HWB3", "year_built": 1955},
             {"id": "B015", "name": "I-40 / Colorado River",      "lat": 34.6133, "lon": -114.6267, "type": "HWB2", "year_built": 1966},
+        ]
+
+    @staticmethod
+    def _ny_bridge_inventory() -> list[dict]:
+        """Synthetic NBI-style bridge inventory for NY key corridors."""
+        return [
+            {"id": "B101", "name": "George Washington Bridge",      "lat": 40.8517, "lon": -73.9527, "type": "HWB4", "year_built": 1931},
+            {"id": "B102", "name": "Tappan Zee / Mario M. Cuomo Br", "lat": 41.0700, "lon": -73.8740, "type": "HWB4", "year_built": 2017},
+            {"id": "B103", "name": "Verrazzano-Narrows Bridge",      "lat": 40.6066, "lon": -74.0447, "type": "HWB4", "year_built": 1964},
+            {"id": "B104", "name": "I-90 / Niagara River (Buffalo)", "lat": 42.9408, "lon": -78.7322, "type": "HWB2", "year_built": 1970},
+        ]
+
+    @staticmethod
+    def _nj_bridge_inventory() -> list[dict]:
+        """Synthetic NBI-style bridge inventory for NJ key corridors."""
+        return [
+            {"id": "B201", "name": "Pulaski Skyway",                 "lat": 40.7335, "lon": -74.0991, "type": "HWB3", "year_built": 1932},
+            {"id": "B202", "name": "Driscoll Bridge (GSP / Raritan)","lat": 40.4612, "lon": -74.2932, "type": "HWB2", "year_built": 1953},
+            {"id": "B203", "name": "Delaware Memorial Bridge",       "lat": 39.6859, "lon": -75.5071, "type": "HWB4", "year_built": 1951},
         ]

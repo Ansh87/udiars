@@ -5,7 +5,22 @@
 import { useState, useCallback } from 'react';
 import axios from 'axios';
 
-const API = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+// Strip any trailing slash(es) so `${API}/route` never produces a double slash
+// (a double slash in the path is a common cause of unexpected 404s behind proxies).
+const API = (process.env.REACT_APP_API_URL || 'http://localhost:8000').replace(/\/+$/, '');
+
+function describeAxiosError(err, label) {
+  if (err.response) {
+    if (err.response.status === 404) {
+      return `${label}: endpoint not found (404). Check that REACT_APP_API_URL ("${API}") points at the deployed backend with no typo or trailing slash.`;
+    }
+    return `${label}: server responded ${err.response.status} ${err.response.statusText || ''}`.trim();
+  }
+  if (err.request) {
+    return `${label}: cannot reach backend at "${API}" — is it running and is REACT_APP_API_URL set correctly?`;
+  }
+  return `${label}: ${err.message}`;
+}
 
 export default function useHazardData() {
   const [mhrm,          setMhrm]          = useState(null);
@@ -67,9 +82,10 @@ export default function useHazardData() {
         params: { origin_lat: originLat, origin_lng: originLng, dest_lat: destLat, dest_lng: destLng },
       });
       setRoutes(res.data);
+      setError(null);
       return res.data;
     } catch (err) {
-      setError(err.message);
+      setError(describeAxiosError(err, 'Compute Routes'));
       return null;
     }
   }, []);
@@ -80,8 +96,9 @@ export default function useHazardData() {
       await axios.post(`${API}/demo/start`);
       const res = await axios.get(`${API}/demo/status`);
       setDemoState(res.data);
+      setError(null);
     } catch (err) {
-      setError(err.message);
+      setError(describeAxiosError(err, 'Demo Start'));
     }
   }, []);
 
@@ -89,8 +106,9 @@ export default function useHazardData() {
     try {
       await axios.post(`${API}/demo/stop`);
       setDemoState({ active: false, alerts: [] });
+      setError(null);
     } catch (err) {
-      setError(err.message);
+      setError(describeAxiosError(err, 'Demo Stop'));
     }
   }, []);
 
@@ -99,8 +117,9 @@ export default function useHazardData() {
     try {
       await axios.post(`${API}/refresh`);
       await loadInitialData();
+      setError(null);
     } catch (err) {
-      setError(err.message);
+      setError(describeAxiosError(err, 'Refresh'));
     }
   }, [loadInitialData]);
 
