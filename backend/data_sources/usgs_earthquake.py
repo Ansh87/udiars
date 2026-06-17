@@ -27,15 +27,24 @@ CA_FAULT_ZONES = [
 ]
 
 # Known fault zones in New York (lower seismicity; Ramapo Fault system)
+# Fix 10.5: named zones required by patent demo — Ramapo Fault Zone NY
+# (Rockland/Orange Counties) and Adirondack Seismic Zone (low-moderate, upstate NY).
 NY_FAULT_ZONES = [
     {"name": "Ramapo Fault (NY)",      "lat": 41.30, "lon": -74.15, "max_mag": 5.0},
     {"name": "Dobbs Ferry / Lower Hudson Seismic Zone", "lat": 41.01, "lon": -73.87, "max_mag": 4.5},
+    {"name": "Ramapo Fault Zone NY", "lat": 41.25, "lon": -74.10, "max_mag": 5.0,
+     "pga_g": 0.05, "counties": ["Rockland", "Orange"]},
+    {"name": "Adirondack Seismic Zone", "lat": 44.10, "lon": -74.00, "max_mag": 4.0,
+     "pga_g": 0.03, "counties": ["Essex", "Hamilton", "Franklin"], "risk": "low-moderate"},
 ]
 
 # Known fault zones in New Jersey (lower seismicity; Ramapo Fault system)
+# Fix 10.5: Ramapo Fault Zone NJ (PGA 0.05g, Passaic/Morris/Bergen Counties).
 NJ_FAULT_ZONES = [
     {"name": "Ramapo Fault (NJ)",      "lat": 41.05, "lon": -74.40, "max_mag": 5.0},
     {"name": "Central NJ Seismic Zone", "lat": 40.45, "lon": -74.55, "max_mag": 4.2},
+    {"name": "Ramapo Fault Zone NJ", "lat": 41.00, "lon": -74.35, "max_mag": 5.0,
+     "pga_g": 0.05, "counties": ["Passaic", "Morris", "Bergen"]},
 ]
 
 

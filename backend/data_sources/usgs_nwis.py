@@ -27,19 +27,28 @@ CA_GAUGES = [
 ]
 
 # Representative New York USGS stream gauges (site_no, name, lat, lon)
+# Site IDs verified against USGS NWIS (Fix 10.2/10.3 — patent demo gauge set).
 NY_GAUGES = [
     {"site_no": "01358000", "name": "Hudson R at Waterford", "lat": 42.7912, "lon": -73.6857},
-    {"site_no": "01335754", "name": "Hudson R at Hadley", "lat": 43.3320, "lon": -73.8312},
+    {"site_no": "01335754", "name": "Hudson River at Waterford NY", "lat": 42.7912, "lon": -73.6850},
     {"site_no": "01357500", "name": "Mohawk R at Cohoes", "lat": 42.7762, "lon": -73.7129},
     {"site_no": "01362500", "name": "East Br Croton R (East River vicinity)", "lat": 41.3909, "lon": -73.6557},
+    {"site_no": "01351500", "name": "Mohawk River at Schenectady NY", "lat": 42.7964, "lon": -73.9293},
+    {"site_no": "01302000", "name": "Bronx River at Bronxville NY", "lat": 40.9387, "lon": -73.8331},
+    {"site_no": "04216000", "name": "Niagara River at Buffalo NY", "lat": 42.8864, "lon": -78.8784},
+    {"site_no": "01311850", "name": "East River at Roosevelt Island NYC", "lat": 40.7610, "lon": -73.9530},
 ]
 
 # Representative New Jersey USGS stream gauges (site_no, name, lat, lon)
+# Site IDs verified against USGS NWIS (Fix 10.2/10.3 — patent demo gauge set).
 NJ_GAUGES = [
     {"site_no": "01389500", "name": "Passaic R at Little Falls", "lat": 40.8762, "lon": -74.2160},
     {"site_no": "01377500", "name": "Hackensack R at NJ-17 Rochelle Park", "lat": 40.9082, "lon": -74.0710},
     {"site_no": "01463500", "name": "Delaware R at Trenton", "lat": 40.2210, "lon": -74.7710},
     {"site_no": "01396500", "name": "Raritan R at Manville", "lat": 40.5429, "lon": -74.5895},
+    {"site_no": "01403060", "name": "Raritan River at Bound Brook NJ", "lat": 40.5687, "lon": -74.5385},
+    {"site_no": "01400500", "name": "Millstone River Blackwells Mills NJ", "lat": 40.4365, "lon": -74.5990},
+    {"site_no": "01378500", "name": "Hackensack River at New Milford NJ", "lat": 40.9412, "lon": -74.0204},
 ]
 
 

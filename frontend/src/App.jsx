@@ -28,25 +28,46 @@ export default function App() {
   const [tier, setTier]               = useState(2);
   const [mobileTab, setMobileTab]     = useState('map');
   const [sheetOpen, setSheetOpen]     = useState(false);
+  // `region` (legacy single-state CA/NY/NJ, kept for MapView sub-focus / STATE_CONFIG
+  // compatibility) vs `regionPill` (new CA/NJNY/ALL pill-level selector, Fix 3).
   const [region, setRegion]           = useState('CA');
+  const [regionPill, setRegionPill]   = useState('CA');
+  const [subFocus, setSubFocus]       = useState('BOTH'); // null/'NJ'/'NY'/'BOTH'
   const [activeModal, setActiveModal] = useState(null); // 'help' | 'tips' | 'readme' | null
   const [hazardVisibility, setHazardVisibility] = useState({
     flood: true, wildfire: true, seismic: true, mhrm: true,
   });
 
   const {
-    mhrm, hazards, routes, economic, demoState,
+    mhrm, hazards, routes, economic, facilities, health, demoState,
     lastUpdated, loading, error,
     loadInitialData, handleWsMessage,
-    computeRoutes, startDemo, stopDemo, forceRefresh,
+    computeRoutes, startDemo, stopDemo, forceRefresh, activateZone,
+    setRoutes,
   } = useHazardData();
 
   const { isConnected, reconnectCount } = useWebSocket(handleWsMessage);
 
-  useEffect(() => { loadInitialData(); }, [loadInitialData]);
+  useEffect(() => { loadInitialData(regionPill); }, [loadInitialData, regionPill]);
+
+  // Cascade: clear previously computed routes whenever the region switches,
+  // so stale cross-region route geometry never lingers on the map/sidebar.
+  useEffect(() => { setRoutes(null); }, [regionPill, setRoutes]);
 
   const onHazardToggle = useCallback((key) => {
     setHazardVisibility(prev => ({ ...prev, [key]: !prev[key] }));
+  }, []);
+
+  const onRegionPillChange = useCallback((pill) => {
+    setRegionPill(pill);
+    if (pill === 'CA') setRegion('CA');
+    else if (pill === 'NJNY') setRegion(subFocus === 'NJ' ? 'NJ' : subFocus === 'NY' ? 'NY' : 'NJ');
+    // ALL: leave `region` as-is for STATE_CONFIG fallback paths; MapView uses regionPill primarily.
+  }, [subFocus]);
+
+  const onSubFocusChange = useCallback((focus) => {
+    setSubFocus(focus);
+    if (focus === 'NJ' || focus === 'NY') setRegion(focus);
   }, []);
 
   // Open bottom sheet when switching to non-map tabs on mobile
@@ -67,17 +88,21 @@ export default function App() {
   // ── MOBILE LAYOUT ──────────────────────────────────────────────────────────
   if (isMobile) {
     const BOTTOM_NAV_H = 56;
+    const REGION_BAR_H = 52;
+    // Both bars stack: region bar sits directly above the bottom nav, so any
+    // "above nav" positioned UI must reserve BOTTOM_NAV_H + REGION_BAR_H total.
+    const RESERVED_BOTTOM_H = BOTTOM_NAV_H + REGION_BAR_H;
     const SHEET_H = sheetOpen ? '60vh' : 0;
 
     return (
       <div style={{ height: '100dvh', width: '100vw', overflow: 'hidden', background: '#0d1b2a', display: 'flex', flexDirection: 'column', position: 'relative' }}>
 
         {/* Alert banner */}
-        <AlertBanner demoState={demoState} hazards={hazards} routes={routes} compact />
+        <AlertBanner demoState={demoState} hazards={hazards} routes={routes} regionPill={regionPill} compact />
 
         {/* Full-screen map */}
         <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-          <MapView mhrm={mhrm} routes={routes} hazardVisibility={hazardVisibility} region={region} />
+          <MapView mhrm={mhrm} routes={routes} hazardVisibility={hazardVisibility} region={region} regionPill={regionPill} subFocus={subFocus} demoState={demoState} />
 
           {/* Status chip top-right */}
           <div style={{
@@ -99,11 +124,11 @@ export default function App() {
             </div>
           </div>
 
-          {/* Quick hazard chips bottom-left (above nav) */}
+          {/* Quick hazard chips bottom-left (above both bottom bars) */}
           {hazards?.compound && (
             <div style={{
               position: 'absolute',
-              bottom: BOTTOM_NAV_H + (sheetOpen ? 0 : 8),
+              bottom: RESERVED_BOTTOM_H + (sheetOpen ? 0 : 8),
               left: 10, zIndex: 900,
               display: 'flex', gap: 6, flexWrap: 'wrap', maxWidth: '60vw',
               transition: 'bottom 0.3s ease',
@@ -134,10 +159,10 @@ export default function App() {
           )}
         </div>
 
-        {/* Bottom sheet */}
+        {/* Bottom sheet — anchored above both the region bar and the nav bar */}
         <div style={{
           position: 'absolute',
-          bottom: BOTTOM_NAV_H,
+          bottom: RESERVED_BOTTOM_H,
           left: 0, right: 0,
           height: SHEET_H,
           background: '#0d1b2a',
@@ -166,7 +191,10 @@ export default function App() {
                   tier={mobileTab === 'routes' ? 1 : mobileTab === 'hazards' ? 2 : 3}
                   onTierChange={setTier}
                   mhrm={mhrm} hazards={hazards} routes={routes} economic={economic}
+                  facilities={facilities} health={health}
                   demoState={demoState} lastUpdated={lastUpdated} isConnected={isConnected}
+                  regionPill={regionPill}
+                  onActivateZone={activateZone}
                   mobile
                 />
               )}
@@ -184,6 +212,11 @@ export default function App() {
                     lastUpdated={lastUpdated}
                     region={region}
                     onRegionChange={setRegion}
+                    regionPill={regionPill}
+                    onRegionPillChange={onRegionPillChange}
+                    subFocus={subFocus}
+                    onSubFocusChange={onSubFocusChange}
+                    isMobile={isMobile}
                     onOpenHelp={() => setActiveModal('help')}
                     onOpenTips={() => setActiveModal('tips')}
                     onOpenReadMe={() => setActiveModal('readme')}
@@ -193,6 +226,41 @@ export default function App() {
               )}
             </div>
           )}
+        </div>
+
+        {/* Region pill bar — fixed bottom bar, stacked directly above bottom nav */}
+        <div style={{
+          position: 'absolute', bottom: BOTTOM_NAV_H, left: 0, right: 0,
+          height: REGION_BAR_H,
+          background: '#0d1b2a',
+          borderTop: '1px solid #1e3a5c',
+          display: 'flex',
+          zIndex: 1200,
+        }}>
+          {[
+            { id: 'CA',   label: 'CA' },
+            { id: 'NJNY', label: 'NJ/NY' },
+            { id: 'ALL',  label: 'ALL' },
+          ].map(p => {
+            const active = regionPill === p.id;
+            return (
+              <button
+                key={p.id}
+                onClick={() => onRegionPillChange(p.id)}
+                style={{
+                  flex: 1, minHeight: 44, border: 'none',
+                  borderRight: '1px solid #1e3a5c',
+                  background: active ? '#1e4080' : '#1a2942',
+                  color: active ? '#60a5fa' : '#94a3b8',
+                  fontWeight: active ? 700 : 400,
+                  fontSize: 13, cursor: 'pointer',
+                  WebkitTapHighlightColor: 'transparent',
+                }}
+              >
+                {p.label}
+              </button>
+            );
+          })}
         </div>
 
         {/* Bottom navigation bar */}
@@ -217,6 +285,7 @@ export default function App() {
                   display: 'flex', flexDirection: 'column',
                   alignItems: 'center', justifyContent: 'center',
                   gap: 3, cursor: 'pointer', fontSize: 18,
+                  minHeight: 44,
                   borderTop: active ? '2px solid #3b82f6' : '2px solid transparent',
                   transition: 'all 0.15s',
                   WebkitTapHighlightColor: 'transparent',
@@ -239,11 +308,11 @@ export default function App() {
   // ── DESKTOP LAYOUT ─────────────────────────────────────────────────────────
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', overflow: 'hidden', background: '#0d1b2a' }}>
-      <AlertBanner demoState={demoState} hazards={hazards} routes={routes} />
+      <AlertBanner demoState={demoState} hazards={hazards} routes={routes} regionPill={regionPill} />
 
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden', position: 'relative' }}>
         <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-          <MapView mhrm={mhrm} routes={routes} hazardVisibility={hazardVisibility} region={region} />
+          <MapView mhrm={mhrm} routes={routes} hazardVisibility={hazardVisibility} region={region} regionPill={regionPill} subFocus={subFocus} demoState={demoState} />
 
           <ControlPanel
             onRouteCompute={computeRoutes}
@@ -257,6 +326,11 @@ export default function App() {
             lastUpdated={lastUpdated}
             region={region}
             onRegionChange={setRegion}
+            regionPill={regionPill}
+            onRegionPillChange={onRegionPillChange}
+            subFocus={subFocus}
+            onSubFocusChange={onSubFocusChange}
+            isMobile={isMobile}
             onOpenHelp={() => setActiveModal('help')}
             onOpenTips={() => setActiveModal('tips')}
             onOpenReadMe={() => setActiveModal('readme')}
@@ -288,7 +362,10 @@ export default function App() {
         <Sidebar
           tier={tier} onTierChange={setTier}
           mhrm={mhrm} hazards={hazards} routes={routes} economic={economic}
+          facilities={facilities} health={health}
           demoState={demoState} lastUpdated={lastUpdated} isConnected={isConnected}
+          regionPill={regionPill}
+          onActivateZone={activateZone}
         />
       </div>
 

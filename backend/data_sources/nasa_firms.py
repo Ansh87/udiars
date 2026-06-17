@@ -32,15 +32,25 @@ CA_FIRE_ZONES = [
 ]
 
 # Known fire-risk areas in New York (upstate forests / Pine Barrens-adjacent)
+# "bbox" (south, north, west, east) added per Fix 10.6 for zones with a defined
+# patent-relevant footprint; point-only zones keep lat/lon as their centroid.
 NY_FIRE_ZONES = [
     {"name": "Adirondack Park",       "lat": 44.00, "lon": -74.30, "risk": "medium"},
     {"name": "Catskill Park",         "lat": 42.10, "lon": -74.40, "risk": "medium"},
-    {"name": "Long Island Pine Barrens", "lat": 40.85, "lon": -72.75, "risk": "low"},
+    {
+        "name": "Long Island Pine Barrens", "lat": 40.875, "lon": -72.85, "risk": "low",
+        "bbox": {"south": 40.8, "north": 40.95, "west": -73.1, "east": -72.6},
+        "counties": ["Suffolk"],
+    },
 ]
 
 # Known fire-risk areas in New Jersey (Pine Barrens have real wildfire risk)
 NJ_FIRE_ZONES = [
-    {"name": "NJ Pine Barrens (Wharton SF)", "lat": 39.70, "lon": -74.55, "risk": "high"},
+    {
+        "name": "NJ Pine Barrens (Wharton SF)", "lat": 39.65, "lon": -74.65, "risk": "high",
+        "bbox": {"south": 39.4, "north": 39.9, "west": -74.9, "east": -74.4},
+        "counties": ["Burlington", "Ocean"],
+    },
     {"name": "NJ Pine Barrens (Bass River SF)", "lat": 39.62, "lon": -74.43, "risk": "medium"},
     {"name": "Wawayanda SF (Highlands)", "lat": 41.18, "lon": -74.47, "risk": "low"},
 ]

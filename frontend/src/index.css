@@ -94,9 +94,12 @@ body {
 }
 .pulse-brown { animation: pulse-brown 1.5s ease-in-out infinite; }
 
-/* Bright, high-contrast map place labels (CartoDB dark_only_labels overlay) */
+/* Bright map place labels (CartoDB dark_only_labels overlay).
+   Brightness alone pushes labels to white; contrast is intentionally left
+   near 1 because boosting it thickens anti-aliased glyph edges and makes
+   text look unnaturally bold. */
 .bright-map-labels {
-  filter: brightness(3) contrast(1.15);
+  filter: brightness(2.2) contrast(1.0);
 }
 
 @keyframes blink {

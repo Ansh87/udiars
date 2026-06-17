@@ -1,7 +1,10 @@
 # UDIARS — Unified Disaster Intelligence and Adaptive Response System
-### California Multi-Hazard POC
+### Multi-Hazard, Multi-State Proof of Concept (California · New York · New Jersey)
 
-Full-stack flood / wildfire / seismic prediction and adaptive routing for California.
+Full-stack flood / wildfire / seismic prediction and pre-emptive adaptive routing,
+implementing the six-step method and three-tier interface described in the UDIARS
+provisional patent specification. See **[Patent Claims Coverage](#patent-claims-coverage)**
+below for how each of the nine claims maps to running code.
 
 ---
 
@@ -86,15 +89,19 @@ Frontend runs at **http://localhost:3000**
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/health` | Data source status + system readiness |
-| GET | `/mhrm` | Multi-Hazard Risk Map (GeoJSON FeatureCollection) |
-| GET | `/hazards` | Active hazard summary for all 3 types |
-| GET | `/route?origin_lat=&origin_lng=&dest_lat=&dest_lng=` | Primary + 2 alternate routes |
-| GET | `/economic` | HAZUS bridge damage + highway closure costs |
-| POST | `/demo/start` | Activate LA US-101 flood demo scenario |
-| POST | `/demo/stop` | Deactivate demo mode |
-| GET | `/demo/status` | Current demo state |
+| GET | `/regions` | Supported state bounding boxes (CA / NY / NJ) for map sync |
+| GET | `/mhrm?region=` | Multi-Hazard Risk Map (GeoJSON FeatureCollection), optionally scoped to `california` or `njny` |
+| GET | `/hazards?region=` | Active hazard summary for all 3 types, region-scoped |
+| GET | `/facilities?region=` | Shelters + hospitals, region-scoped |
+| GET | `/route?origin_lat=&origin_lng=&dest_lat=&dest_lng=&region=` | Primary + 2 independent alternate routes — never returns 404/500; falls back to static region-appropriate JSON on any routing-engine error |
+| GET | `/economic?region=` | HAZUS bridge damage + highway closure costs |
+| POST | `/demo/start` / `/demo/stop` / `GET /demo/status` | Legacy single-scenario LA US-101 flood demo |
+| POST | `/demo/flood` | California flood demo (US-101 Ventura→SLO, P(flood)=0.78) |
+| POST | `/demo/flood/njny` | NJ/NY flood demo (US-1 near New Brunswick, Raritan River gauge, P(flood)=0.82) |
+| POST | `/demo/flood/all` | Activates both CA and NJ/NY demo scenarios simultaneously |
+| POST | `/demo/zone/{a\|b\|c\|clear}` | Force a wildfire zone override for demo purposes (auto-clears after 60s) |
 | POST | `/refresh` | Force immediate data refresh |
-| WS | `/ws/updates` | Live MHRM push every 60 seconds |
+| WS | `/ws/updates` | Live MHRM push every 60 seconds, plus heartbeats and live pre-emptive trigger status |
 
 ---
 
@@ -205,6 +212,34 @@ The `useWebSocket` hook auto-reconnects with exponential backoff (3s → max 30s
 | `OSMNX_CACHE_DIR` | `./cache/osmnx` | OSMnx tile cache directory |
 | `DEMO_MODE` | `false` | Start in demo mode |
 | `CORS_ORIGINS` | `http://localhost:3000` | Allowed CORS origins |
+
+---
+
+## Patent Claims Coverage
+
+The provisional specification's six-step method (FIG. 11) and nine claims map to this
+codebase as follows. All references are to the running POC, not aspirational design.
+
+| Claim / Step | Patent Requirement | Implementation |
+|---|---|---|
+| Step 1 — Real-time ingestion | Continuously ingest hydrological, meteorological, fire, and seismic data | `data_sources/` — USGS NWIS (gauges), NOAA MRMS proxy via Open-Meteo (rainfall), NASA FIRMS (fire detections), USGS Earthquake Hazards (seismic events), Open-Meteo (wind/temp/humidity). All five run in parallel each refresh cycle (`main.py: refresh_all_data`), each with automatic synthetic-data fallback so the system never blocks on an unavailable upstream API. |
+| Step 2 — ML-predicted future hazard conditions | Predict hazard probability ahead of physical onset, not just current state | `models/flood_model.py` (Random Forest, 150 trees), `models/wildfire_model.py` (XGBoost / GradientBoosting fallback), `models/seismic_model.py` (physics-based Atkinson-Boore 2003 PGA estimate). `engines/compound_hazard.py` layers a simplified LSTM-trend approximation on top of the RF output (Fix 8.2) and emits 30/60/90-minute forward probability horizons per segment (`flood_prob_30/60/90`). |
+| Step 3 — Multi-Hazard Risk Map (MHRM) fusion | Combine flood, wildfire, and seismic outputs into one composite risk surface | `engines/compound_hazard.py: CompoundHazardEngine.update()` — computes `HazardPenalty = max(flood_prob, wildfire_zone_score, seismic_shaking_prob)` per road segment across all three states and serializes the result as a GeoJSON FeatureCollection (`GET /mhrm`). Each feature also reports `dominant_hazard` (flood/wildfire/seismic/compound) per Fix 7. |
+| Step 4 — Dynamic edge weighting | Apply hazard- and traffic-aware weights to the road network | `w(e,t) = T_nominal × (1 + 0.5·TrafficDensity(e,t)) + 5.0·HazardPenalty(e,t)` implemented exactly as specified in `compound_hazard.py` (`ALPHA_TRAFFIC=0.5`, `BETA_HAZARD=5.0`). `traffic_density_for_hour()` is a time-of-day proxy (Fix 8.1) standing in for live traffic feeds, which are out of POC scope. |
+| Step 5 — Primary + 2 independent alternate routes | Pre-compute a primary route and at least two independent alternates before a closure occurs | `engines/routing_engine.py` (OSMnx/Dijkstra over LA + Bay Area graph, straight-line fallback elsewhere) and the `/route` endpoint's static fallback payloads (`_CALIFORNIA_FALLBACK`, `_NJNY_FALLBACK`) each return `primary`, `alternate1`, `alternate2`, with alternates flagged `independent_of_primary: true`. |
+| Step 6 — Pre-emptive transmission before closure | Notify and reroute before the hazard physically closes the road | Two independent trigger paths: (a) demo-forced triggers via `/demo/flood`, `/demo/flood/njny`, `/demo/flood/all` that set `flood_prob ≥ 0.65` and `edge_weight=9.5` on a named segment with a recorded `trigger_time_utc`; (b) `_update_live_trigger()` in `main.py`, which scans the live (non-demo) MHRM every refresh cycle for any segment crossing the same 0.65 threshold and surfaces it via `live_pre_emptive_trigger` in `/hazards` and the WebSocket broadcast — i.e. the system can also fire pre-emptively from real (or synthetic-fallback) data, not only the demo button. |
+| Claim — Three-tier interface | Distinct views for driver / first responder / emergency manager | `frontend/src/components/Sidebar.jsx` + `TIER_INFO` in `constants/appData.js`: Tier 1 (single route, plain-language status), Tier 2 (all routes, hazard scores, shelter/hospital), Tier 3 (full per-segment MHRM + economic impact dashboard). |
+| Claim — Explainability | Surface the contributing factors behind a hazard prediction | Per-segment `shap_top_features` (Fix 9) ranks `stage_rate_ft_hr`, `rainfall_1hr_in`, and `soil_moisture_index` by normalized contribution weight; rendered in the Tier 2/3 sidebar as `SHAPBreakdown`. |
+| Claim — Multi-region generalizability | Method is not limited to a single geography | Same pipeline runs over California, New York, and New Jersey segments concurrently (`CA_HIGHWAY_SEGMENTS` / `NY_HIGHWAY_SEGMENTS` / `NJ_HIGHWAY_SEGMENTS` in `compound_hazard.py`), with region-scoped REST filtering (`?region=california` / `?region=njny`) on `/mhrm`, `/hazards`, `/facilities`, and `/economic`. |
+
+**Known POC-scope simplifications** (disclosed, not hidden): traffic density is a static
+time-of-day curve rather than a live feed; the "LSTM" trend adjustment is a rule-based
+multiplier on stage rate rather than a trained recurrent network; OSMnx road graphs are
+loaded only for LA + SF Bay Area, with a straight-line interpolation fallback elsewhere;
+elevation is a coastal-distance heuristic rather than SRTM lookup. None of these affect
+claim coverage — each claim's *mechanism* is implemented end-to-end — but a production
+system would replace these proxies with their full-fidelity counterparts (see Notes for
+Production below).
 
 ---
 

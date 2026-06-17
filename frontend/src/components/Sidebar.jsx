@@ -10,7 +10,9 @@ import { TIER_INFO } from '../constants/appData';
 
 const TIER_LABELS = TIER_INFO.map(t => t.label);
 
-const SHELTERS = [
+// Static fallback shelter/hospital list — used only if the /facilities
+// endpoint hasn't returned data yet (e.g. backend briefly unavailable).
+const FALLBACK_SHELTERS = [
   { name: 'LA Convention Center', lat: 34.0430, lng: -118.2673, type: 'Shelter', capacity: 5000 },
   { name: 'Rose Bowl Stadium',    lat: 34.1614, lng: -118.1676, type: 'Shelter', capacity: 20000 },
   { name: 'Dodger Stadium',       lat: 34.0739, lng: -118.2400, type: 'Shelter', capacity: 56000 },
@@ -32,6 +34,49 @@ function HazardBar({ label, value, color }) {
       </div>
     </div>
   );
+}
+
+// "flood"->"Flood-Dominant", "compound"->"Compound Hazard" etc. (Fix 7)
+function dominantHazardLabel(dh) {
+  if (!dh) return null;
+  if (dh === 'compound') return 'Compound Hazard';
+  const cap = dh.charAt(0).toUpperCase() + dh.slice(1);
+  return `${cap}-Dominant`;
+}
+
+const HAZARD_PENALTY_TOOLTIP =
+  'HazardPenalty = max(flood_prob, wildfire_zone_score, seismic_pga_score) per UDIARS patent ' +
+  'Section 4.7 — w(e,t) = T_nominal×(1+0.5×Traffic)+5.0×HazardPenalty';
+
+function SHAPBreakdown({ features, approximation = false }) {
+  if (!features?.length) return null;
+  const sorted = [...features].sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0));
+  return (
+    <div style={{ marginTop: 6, fontSize: 11 }}>
+      <div style={{ color: '#94a3b8', fontWeight: 600, marginBottom: 3 }}>
+        SHAP Feature Attribution {approximation ? '(POC approximation)' : ''}
+      </div>
+      {sorted.slice(0, 3).map((f, i) => (
+        <div key={f.feature || i} style={{ color: '#cbd5e1' }}>
+          {i + 1}. {f.feature} = {f.value} (weight: {f.weight})
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Client-side synthesized SHAP-style breakdown for demo mode when the backend
+// doesn't supply numeric values — explicitly labeled as a POC approximation.
+function synthesizeDemoSHAP(demoState) {
+  const stageRate = demoState?.stage_rate_ft_hr ?? 0.8;
+  const rainfall = demoState?.rainfall_1hr_in ?? 0.6;
+  const soil = demoState?.soil_moisture_index ?? 0.4;
+  const total = stageRate + rainfall + soil || 1;
+  return [
+    { feature: 'stage_rate_ft_hr',     value: stageRate, weight: +(stageRate / total).toFixed(2) },
+    { feature: 'rainfall_1hr_in',      value: rainfall,  weight: +(rainfall / total).toFixed(2) },
+    { feature: 'soil_moisture_index',  value: soil,      weight: +(soil / total).toFixed(2) },
+  ];
 }
 
 function RouteCard({ route, index, isDemo }) {
@@ -81,16 +126,93 @@ function RouteCard({ route, index, isDemo }) {
   );
 }
 
-export default function Sidebar({ tier, onTierChange, mhrm, hazards, routes, economic, demoState, lastUpdated, isConnected, mobile = false }) {
+// Fallback-mode route card — backend returned {status:"fallback", primary,
+// alternate1, alternate2} instead of GeoJSON features (Fix 5). Each route
+// object has corridor/hazard_score/eta_minutes/segments/shelter/hospital/fuel.
+function FallbackRouteCard({ route, index }) {
+  if (!route) return null;
+  const routeColors = ['#22c55e', '#3b82f6', '#a855f7'];
+  const routeNames  = ['Primary Route', 'Alternate Route 1', 'Alternate Route 2'];
+  const routeLabels = ['FASTEST', 'ALT 1', 'ALT 2'];
+  const hp = route.hazard_score || 0;
+
+  return (
+    <div style={{
+      background: 'rgba(30,51,83,0.5)',
+      border: `1px solid ${routeColors[index]}`,
+      borderRadius: 8,
+      padding: '10px 12px',
+      marginBottom: 8,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+        <div style={{ width: 12, height: 12, borderRadius: '50%', background: routeColors[index], flexShrink: 0 }} />
+        <span style={{ fontWeight: 600, fontSize: 13 }}>{routeNames[index]}</span>
+        <span style={{ fontSize: 12, color: '#94a3b8', marginLeft: 4 }}>{route.corridor}</span>
+        <span className="badge badge-blue" style={{ marginLeft: 'auto', fontSize: 10 }}>
+          {routeLabels[index]}
+        </span>
+      </div>
+      <div style={{ display: 'flex', gap: 16, fontSize: 12, marginBottom: 6 }}>
+        <div>
+          <span style={{ color: '#64748b' }}>ETA </span>
+          <span style={{ fontWeight: 600 }}>{route.eta_minutes ?? '--'} min</span>
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 2 }}>
+            <span style={{ color: '#64748b' }}>Hazard Score</span>
+            <span style={{ color: hp >= 0.65 ? '#ef4444' : hp >= 0.35 ? '#f97316' : '#22c55e', fontWeight: 600 }}>{(hp * 100).toFixed(0)}%</span>
+          </div>
+          <div className="progress-bar">
+            <div className="progress-fill" style={{ width: `${hp * 100}%`, background: hp >= 0.65 ? '#ef4444' : hp >= 0.35 ? '#f97316' : '#22c55e' }} />
+          </div>
+        </div>
+      </div>
+      <div style={{ fontSize: 11, color: '#94a3b8' }}>
+        🏠 {route.shelter || '--'} · 🏥 {route.hospital || '--'} · ⛽ {route.fuel || '--'}
+      </div>
+    </div>
+  );
+}
+
+export default function Sidebar({
+  tier, onTierChange, mhrm, hazards, routes, economic, facilities,
+  demoState, lastUpdated, isConnected, mobile = false,
+  regionPill = 'CA', onActivateZone, health,
+}) {
   const [activeTab, setActiveTab] = useState('hazards');
-  const routeFeatures = routes?.features || [];
+  const isFallback    = routes?.status === 'fallback';
+  const routeFeatures = !isFallback ? (routes?.features || []) : [];
+  const fallbackRoutes = isFallback
+    ? [routes.primary, routes.alternate1, routes.alternate2].filter(Boolean)
+    : [];
   const mhrmFeatures  = mhrm?.features   || [];
 
-
+  const shelterList = facilities?.shelters?.length || facilities?.hospitals?.length
+    ? [
+        ...(facilities.shelters || []).map(s => ({ ...s, type: 'Shelter' })),
+        ...(facilities.hospitals || []).map(h => ({ ...h, type: 'Hospital' })),
+      ]
+    : FALLBACK_SHELTERS;
 
   const outerStyle = mobile
     ? { display: 'flex', flexDirection: 'column', overflow: 'hidden', height: '100%' }
     : { width: 320, height: '100%', background: '#0d1b2a', borderLeft: '1px solid #1e3a5c', display: 'flex', flexDirection: 'column', overflow: 'hidden' };
+
+  // T1 plain-language summary derived from primary route / demo state
+  const primaryRoute = isFallback ? routes.primary : routeFeatures[0];
+  const primaryProps = isFallback ? primaryRoute : primaryRoute?.properties;
+  const primaryDominantHazard = primaryProps?.dominant_hazard
+    ? dominantHazardLabel(primaryProps.dominant_hazard) : null;
+  const avoidedSegment = primaryProps?.segments?.[0] || demoState?.segment || 'an affected segment';
+  const hazardTypeWord = primaryProps?.dominant_hazard || 'hazard';
+
+  const health1 = health?.data_sources || {};
+  const healthRow = [
+    { key: 'usgs_nwis', label: 'USGS' },
+    { key: 'noaa',      label: 'NOAA' },
+    { key: 'firms',     label: 'FIRMS' },
+    { key: 'usgs_eq',   label: 'USGS-EQ' },
+  ].map(s => ({ ...s, ok: !!health1[s.key]?.available }));
 
   return (
     <div style={outerStyle}>
@@ -118,6 +240,7 @@ export default function Sidebar({ tier, onTierChange, mhrm, hazards, routes, eco
               style={{
                 flex: 1,
                 padding: '5px 4px',
+                minHeight: 44,
                 fontSize: 11,
                 fontWeight: tier === i + 1 ? 700 : 400,
                 background: tier === i + 1 ? '#1e4080' : '#1a2942',
@@ -140,16 +263,38 @@ export default function Sidebar({ tier, onTierChange, mhrm, hazards, routes, eco
       {/* Scrollable content */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '10px 14px' }}>
 
+        {isFallback && (
+          <div style={{ background: 'rgba(234,179,8,0.15)', border: '1px solid #eab308', color: '#fbbf24', borderRadius: 6, padding: '6px 10px', fontSize: 11, marginBottom: 10 }}>
+            ⚠️ Showing pre-computed corridors — live graph unavailable
+          </div>
+        )}
+
         {/* ── TIER 1: DRIVER ── */}
         {tier === 1 && (
           <div>
             <div className="card">
               <div className="card-title">🗺 Route Summary</div>
-              {routeFeatures.length > 0 ? (
+              {demoState?.active ? (
+                <div style={{ fontSize: 13, color: '#fca5a5', background: 'rgba(239,68,68,0.1)', borderRadius: 6, padding: '8px 10px' }}>
+                  TAKE {demoState.reroute?.corridor || '--'} — Flood risk detected ahead on {demoState.segment || 'segment'} ·
+                  {' '}P(flood)={demoState.flood_prob !== undefined ? Math.round(demoState.flood_prob * 100) : '--'}% exceeds safety threshold
+                </div>
+              ) : isFallback ? (
+                <FallbackRouteCard route={routes.primary} index={0} />
+              ) : routeFeatures.length > 0 ? (
                 <RouteCard route={routeFeatures[0]} index={0} isDemo={demoState?.active} />
               ) : (
                 <div style={{ color: '#64748b', textAlign: 'center', padding: 12 }}>
                   Enter origin & destination to compute route
+                </div>
+              )}
+              {primaryRoute && !demoState?.active && (
+                <div style={{ marginTop: 8, fontSize: 12, color: '#cbd5e1' }}>
+                  Take {primaryProps?.corridor || (isFallback ? routes.primary?.corridor : 'this route')} — {hazardTypeWord} risk ahead on {avoidedSegment}.
+                  {primaryDominantHazard && <span style={{ color: '#94a3b8' }}> ({primaryDominantHazard})</span>}
+                  <div style={{ marginTop: 4, color: '#94a3b8' }}>
+                    🏠 Nearest shelter: {primaryProps?.shelter || '--'} · 🏥 Nearest hospital: {primaryProps?.hospital || '--'}
+                  </div>
                 </div>
               )}
             </div>
@@ -173,7 +318,14 @@ export default function Sidebar({ tier, onTierChange, mhrm, hazards, routes, eco
 
             <div className="card">
               <div className="card-title">📍 ETA to Safety</div>
-              {routeFeatures[0] ? (
+              {isFallback && routes.primary ? (
+                <div style={{ fontSize: 22, fontWeight: 700, color: '#22c55e' }}>
+                  {routes.primary.eta_minutes ?? '--'} min
+                  <div style={{ fontSize: 12, fontWeight: 400, color: '#64748b', marginTop: 2 }}>
+                    via {routes.primary.corridor || 'primary corridor'}
+                  </div>
+                </div>
+              ) : routeFeatures[0] ? (
                 <div style={{ fontSize: 22, fontWeight: 700, color: '#22c55e' }}>
                   {routeFeatures[0].properties?.eta_minutes || '--'} min
                   <div style={{ fontSize: 12, fontWeight: 400, color: '#64748b', marginTop: 2 }}>
@@ -190,9 +342,25 @@ export default function Sidebar({ tier, onTierChange, mhrm, hazards, routes, eco
         {/* ── TIER 2: FIRST RESPONDER ── */}
         {tier === 2 && (
           <div>
+            {demoState?.active && (
+              <div className="card">
+                <div className="card-title">🎬 Demo: Active Reroute</div>
+                <div style={{ fontSize: 12, color: '#fca5a5', marginBottom: 8 }}>
+                  Avoiding {demoState.segment || 'segment'} — P(flood)={demoState.flood_prob !== undefined ? Math.round(demoState.flood_prob * 100) : '--'}%
+                </div>
+                {fallbackRoutes.length > 0
+                  ? fallbackRoutes.map((r, i) => <FallbackRouteCard key={i} route={r} index={i} />)
+                  : <div style={{ color: '#64748b', fontSize: 12 }}>Awaiting reroute corridor data…</div>}
+              </div>
+            )}
+
             <div className="card">
-              <div className="card-title">🚨 All Routes ({routeFeatures.length})</div>
-              {routeFeatures.length > 0 ? (
+              <div className="card-title">🚨 All Routes ({isFallback ? fallbackRoutes.length : routeFeatures.length})</div>
+              {isFallback ? (
+                fallbackRoutes.length > 0
+                  ? fallbackRoutes.map((r, i) => <FallbackRouteCard key={i} route={r} index={i} />)
+                  : <div style={{ color: '#64748b', textAlign: 'center', padding: 12 }}>No corridor data available</div>
+              ) : routeFeatures.length > 0 ? (
                 routeFeatures.map((r, i) => (
                   <RouteCard key={i} route={r} index={i} isDemo={demoState?.active} />
                 ))
@@ -204,21 +372,23 @@ export default function Sidebar({ tier, onTierChange, mhrm, hazards, routes, eco
             </div>
 
             <div className="card">
-              <div className="card-title">🏥 Shelter & Hospital Locations</div>
-              {SHELTERS.map((s, i) => (
+              <div className="card-title">🏥 Shelter &amp; Hospital Locations</div>
+              {shelterList.map((s, i) => (
                 <div key={i} style={{
                   display: 'flex',
                   alignItems: 'center',
                   gap: 8,
                   padding: '6px 0',
-                  borderBottom: i < SHELTERS.length - 1 ? '1px solid #1e3353' : 'none',
+                  borderBottom: i < shelterList.length - 1 ? '1px solid #1e3353' : 'none',
                   fontSize: 12,
                 }}>
                   <span style={{ fontSize: 16 }}>{s.type === 'Hospital' ? '🏥' : '🏠'}</span>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 500 }}>{s.name}</div>
                     <div style={{ color: '#64748b', fontSize: 11 }}>
-                      {s.type === 'Hospital' ? `${s.beds} beds` : `Cap: ${s.capacity?.toLocaleString()}`}
+                      {s.type === 'Hospital'
+                        ? (s.beds ? `${s.beds} beds` : `${s.lat?.toFixed?.(4)}, ${s.lng?.toFixed?.(4)}`)
+                        : (s.capacity ? `Cap: ${s.capacity?.toLocaleString()}` : `${s.lat?.toFixed?.(4)}, ${s.lng?.toFixed?.(4)}`)}
                     </div>
                   </div>
                   <span className={`badge ${s.type === 'Hospital' ? 'badge-blue' : 'badge-green'}`}>
@@ -237,6 +407,30 @@ export default function Sidebar({ tier, onTierChange, mhrm, hazards, routes, eco
                 <HazardBar label="Compound Risk" value={hazards.compound?.max_hazard_penalty || 0} color="#ef4444" />
               </div>
             )}
+
+            {/* Zone status + zone-override demo buttons (Fix 9/12, T2 only) */}
+            {hazards?.wildfire && (
+              <div className="card">
+                <div className="card-title">🔥 Wildfire Zone Status</div>
+                <div style={{ fontSize: 12, color: '#cbd5e1', lineHeight: 1.6 }}>
+                  <div>Zone A (0–2 mi): {hazards.wildfire.zone_a_segments ?? 0} segments affected</div>
+                  <div>Zone B (2–10 mi): {hazards.wildfire.zone_b_segments ?? 0} segments affected</div>
+                  <div>Zone C (10–25 mi): {hazards.wildfire.zone_c_segments ?? 0} segments affected</div>
+                </div>
+                <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                  <button onClick={() => onActivateZone?.('a')} className="btn btn-secondary" style={{ flex: 1, fontSize: 11, minHeight: 36, justifyContent: 'center' }}>Activate Zone A</button>
+                  <button onClick={() => onActivateZone?.('b')} className="btn btn-secondary" style={{ flex: 1, fontSize: 11, minHeight: 36, justifyContent: 'center' }}>Activate Zone B</button>
+                  <button onClick={() => onActivateZone?.('clear')} className="btn btn-secondary" style={{ flex: 1, fontSize: 11, minHeight: 36, justifyContent: 'center' }}>Clear Zones</button>
+                </div>
+              </div>
+            )}
+
+            {/* SHAP breakdown for demo or hazard alerts with shap_top_features (T2/T3) */}
+            {demoState?.active && (
+              <div className="card">
+                <SHAPBreakdown features={demoState.shap_top_features || synthesizeDemoSHAP(demoState)} approximation />
+              </div>
+            )}
           </div>
         )}
 
@@ -252,6 +446,7 @@ export default function Sidebar({ tier, onTierChange, mhrm, hazards, routes, eco
                   style={{
                     flex: 1,
                     padding: '5px 4px',
+                    minHeight: 40,
                     fontSize: 11,
                     fontWeight: activeTab === tab ? 700 : 400,
                     background: activeTab === tab ? '#1e4080' : '#1a2942',
@@ -266,6 +461,32 @@ export default function Sidebar({ tier, onTierChange, mhrm, hazards, routes, eco
                 </button>
               ))}
             </div>
+
+            {demoState?.active && (
+              <div className="card">
+                <div className="card-title">🎬 Demo Detail</div>
+                <div style={{ fontSize: 12, color: '#cbd5e1', lineHeight: 1.7 }}>
+                  <div>P(flood): {demoState.flood_prob !== undefined ? `${Math.round(demoState.flood_prob * 100)}%` : '--'}</div>
+                  <div>Edge weight: {demoState.edge_weight ?? 9.5}</div>
+                  <div>Trigger time: {demoState.trigger_time_display || '--'}</div>
+                  {demoState.patent_note && (
+                    <div style={{ marginTop: 6, color: '#94a3b8', fontStyle: 'italic' }}>{demoState.patent_note}</div>
+                  )}
+                </div>
+                <SHAPBreakdown features={demoState.shap_top_features || synthesizeDemoSHAP(demoState)} approximation />
+              </div>
+            )}
+
+            {!isFallback && routeFeatures.length > 0 && (
+              <div className="card">
+                <div className="card-title">🔁 Route Independence</div>
+                {routeFeatures.map((r, i) => (
+                  <div key={i} style={{ fontSize: 11, color: r.properties?.independent_of_primary ? '#86efac' : '#fca5a5', marginBottom: 3 }}>
+                    {r.properties?.route_type || `Route ${i+1}`}: {r.properties?.independent_of_primary ? '✓ Routes independently verified — no shared segments' : '⚠️ Shares segments with primary'}
+                  </div>
+                ))}
+              </div>
+            )}
 
             {activeTab === 'hazards' && hazards && (
               <div>
@@ -339,6 +560,9 @@ export default function Sidebar({ tier, onTierChange, mhrm, hazards, routes, eco
                         const p = feat.properties;
                         const hp = p.hazard_penalty;
                         const color = hp >= 0.65 ? '#ef4444' : hp >= 0.35 ? '#f97316' : hp >= 0.15 ? '#eab308' : '#22c55e';
+                        const dhLabel = dominantHazardLabel(p.dominant_hazard);
+                        const stageArrow = p.stage_rate_ft_hr > 0.05 ? ' ↑ Rising' : p.stage_rate_ft_hr < -0.05 ? ' ↓ Falling' : ' → Stable';
+                        const hasHorizons = p.flood_prob_30 !== undefined || p.flood_prob_60 !== undefined || p.flood_prob_90 !== undefined;
                         return (
                           <div key={p.id} style={{
                             padding: '7px 0',
@@ -347,13 +571,26 @@ export default function Sidebar({ tier, onTierChange, mhrm, hazards, routes, eco
                           }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
                               <span style={{ fontWeight: 500 }}>{p.name}</span>
-                              <span style={{ color, fontWeight: 700 }}>{(hp * 100).toFixed(0)}%</span>
+                              <span
+                                title={HAZARD_PENALTY_TOOLTIP}
+                                style={{ color, fontWeight: 700, cursor: 'help' }}
+                              >
+                                {(hp * 100).toFixed(0)}% {dhLabel ? `· ${dhLabel}` : ''} ⓘ
+                              </span>
                             </div>
                             <div style={{ color: '#64748b', fontSize: 10 }}>
-                              Flood: {(p.flood_probability * 100).toFixed(0)}% ·
+                              Flood: {(p.flood_probability * 100).toFixed(0)}%{stageArrow} ·
                               WF: {p.wildfire_zone !== 'none' ? `Zone ${p.wildfire_zone}` : 'Clear'} ·
                               PGA: {p.seismic_pga_g}g
                             </div>
+                            {hasHorizons && (
+                              <div style={{ color: '#60a5fa', fontSize: 10, marginTop: 2 }}>
+                                P(flood) t+30: {((p.flood_prob_30||0)*100).toFixed(0)}% · t+60: {((p.flood_prob_60||0)*100).toFixed(0)}% · t+90: {((p.flood_prob_90||0)*100).toFixed(0)}%
+                              </div>
+                            )}
+                            {p.shap_top_features?.length > 0 && (
+                              <SHAPBreakdown features={p.shap_top_features} />
+                            )}
                           </div>
                         );
                       })}
@@ -377,7 +614,23 @@ export default function Sidebar({ tier, onTierChange, mhrm, hazards, routes, eco
         color: '#475569',
         flexShrink: 0,
       }}>
-        UDIARS v1.0 POC · CA · NY · NJ · Data auto-refreshes every 60s
+        <div>UDIARS v1.0 POC · CA · NY · NJ · Data auto-refreshes every 60s</div>
+        {mobile ? (
+          <div style={{ marginTop: 4 }}>
+            Sources: USGS {healthRow.find(h => h.key === 'usgs_nwis')?.ok ? '✓' : '✗'} ·
+            {' '}NOAA {healthRow.find(h => h.key === 'noaa')?.ok ? '✓' : '✗'} ·
+            {' '}FIRMS {healthRow.find(h => h.key === 'firms')?.ok ? '✓' : '✗'} ·
+            {' '}EQ {healthRow.find(h => h.key === 'usgs_eq')?.ok ? '✓' : '✗'}
+          </div>
+        ) : (
+          <div style={{ display: 'flex', gap: 10, marginTop: 4, flexWrap: 'wrap' }}>
+            {healthRow.map(s => (
+              <span key={s.key} style={{ color: s.ok ? '#86efac' : '#f87171' }}>
+                {s.label} {s.ok ? '✓' : '✗'}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

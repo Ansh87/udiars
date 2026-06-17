@@ -13,7 +13,27 @@
 import React, { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { STATE_CONFIG } from '../constants/appData';
+import { STATE_CONFIG, REGION_PILLS, SUB_FOCUS } from '../constants/appData';
+
+// "flood"->"Flood-Dominant", "wildfire"->"Wildfire-Dominant", "seismic"->"Seismic-Dominant",
+// "compound"->"Compound Hazard" — per Fix 7 spec.
+function dominantHazardLabel(dh) {
+  if (!dh) return null;
+  if (dh === 'compound') return 'Compound Hazard';
+  const cap = dh.charAt(0).toUpperCase() + dh.slice(1);
+  return `${cap}-Dominant`;
+}
+
+const HAZARD_PENALTY_TOOLTIP =
+  'HazardPenalty = max(flood_prob, wildfire_zone_score, seismic_pga_score) per UDIARS patent ' +
+  'Section 4.7 — w(e,t) = T_nominal×(1+0.5×Traffic)+5.0×HazardPenalty';
+
+function stageDirection(stageRate) {
+  if (stageRate === undefined || stageRate === null) return '';
+  if (stageRate > 0.05) return ' ↑ Rising';
+  if (stageRate < -0.05) return ' ↓ Falling';
+  return ' → Stable';
+}
 
 // Fix Leaflet's default icon paths broken by webpack
 delete L.Icon.Default.prototype._getIconUrl;
@@ -26,7 +46,7 @@ L.Icon.Default.mergeOptions({
 const CA_CENTER = STATE_CONFIG.CA.center;
 const CA_ZOOM   = STATE_CONFIG.CA.zoom;
 
-export default function MapView({ mhrm, routes, hazardVisibility, region }) {
+export default function MapView({ mhrm, routes, hazardVisibility, region, regionPill, subFocus, demoState }) {
   const mapRef       = useRef(null);
   const leafletRef   = useRef(null);
   const layersRef    = useRef({
@@ -36,6 +56,8 @@ export default function MapView({ mhrm, routes, hazardVisibility, region }) {
     seismic:  null,
     routes:   null,
   });
+  const demoMarkerRef    = useRef(null);
+  const demoIntervalRef  = useRef(null);
 
   // Initialize map once
   useEffect(() => {
@@ -44,9 +66,12 @@ export default function MapView({ mhrm, routes, hazardVisibility, region }) {
     const map = L.map(mapRef.current, {
       center: CA_CENTER,
       zoom: CA_ZOOM,
-      zoomControl: true,
+      // Zoom control defaults to top-left, which collides with the
+      // ControlPanel overlay anchored there — move it out of the way.
+      zoomControl: false,
       attributionControl: true,
     });
+    L.control.zoom({ position: 'topright' }).addTo(map);
 
     // Dark basemap WITHOUT labels, so we can overlay bright labels on top
     L.tileLayer(
@@ -112,10 +137,30 @@ export default function MapView({ mhrm, routes, hazardVisibility, region }) {
     };
   }, []);
 
-  // Zoom/pan to selected state
+  // Zoom/pan — pill-level regions (CA/NJNY/ALL) use flyTo with the three named
+  // targets from Fix 3; NJNY sub-state focus (NJ/NY/BOTH) overrides with its
+  // own flyTo target. Falls back to the legacy per-state fitBounds behavior
+  // when only the old single-state `region` prop is supplied (no regionPill).
   useEffect(() => {
     const map = leafletRef.current;
-    if (!map || !region) return;
+    if (!map) return;
+
+    if (regionPill) {
+      let target = REGION_PILLS[regionPill];
+      if (regionPill === 'NJNY' && subFocus && SUB_FOCUS[subFocus]) {
+        target = SUB_FOCUS[subFocus];
+      }
+      if (target) {
+        try {
+          map.flyTo(target.center, target.zoom, { duration: 1.2 });
+        } catch (_) {
+          map.setView(target.center, target.zoom);
+        }
+        return;
+      }
+    }
+
+    if (!region) return;
     const cfg = STATE_CONFIG[region];
     if (!cfg) return;
     try {
@@ -123,7 +168,7 @@ export default function MapView({ mhrm, routes, hazardVisibility, region }) {
     } catch (_) {
       map.setView(cfg.center, cfg.zoom);
     }
-  }, [region]);
+  }, [region, regionPill, subFocus]);
 
   // MHRM overlay
   useEffect(() => {
@@ -172,20 +217,28 @@ export default function MapView({ mhrm, routes, hazardVisibility, region }) {
           weight: 2,
           opacity: 0.8,
         });
+        const dhLabel = dominantHazardLabel(p.dominant_hazard);
+        const stageArrow = stageDirection(p.stage_rate_ft_hr);
+        // Tier gate for 30/60/90 horizons is applied in Sidebar (T2/T3 only);
+        // the map popup always shows them when present since map popups aren't tier-scoped.
+        const horizonsLine = (p.flood_prob_30 !== undefined || p.flood_prob_60 !== undefined || p.flood_prob_90 !== undefined)
+          ? `<span style="color:#60a5fa;font-size:10px">P(flood) t+30: ${((p.flood_prob_30||0)*100).toFixed(0)}% · t+60: ${((p.flood_prob_60||0)*100).toFixed(0)}% · t+90: ${((p.flood_prob_90||0)*100).toFixed(0)}%</span><br>`
+          : '';
         circle.bindPopup(`
           <div style="font-family:monospace;font-size:12px;min-width:220px">
             <b>${p.name}</b><br>
             <span style="color:#94a3b8">Highway:</span> ${p.highway} · ${p.direction}<br>
             <hr style="border-color:#334">
-            <b style="color:${p.risk_color}">Compound Risk: ${(hp*100).toFixed(0)}% (${p.risk_level?.toUpperCase()})</b><br>
+            <b style="color:${p.risk_color}" title="${HAZARD_PENALTY_TOOLTIP}">Compound Risk: ${(hp*100).toFixed(0)}% (${p.risk_level?.toUpperCase()})${dhLabel ? ' · ' + dhLabel : ''} ⓘ</b><br>
             <span style="color:#64748b;font-size:10px">= worst of flood / wildfire / seismic below</span><br>
-            <span style="color:#60a5fa">🌊 Flood:</span> ${(p.flood_probability*100).toFixed(1)}% · Stage: ${p.stage_ft}ft<br>
+            <span style="color:#60a5fa">🌊 Flood:</span> ${(p.flood_probability*100).toFixed(1)}% · Stage: ${p.stage_ft}ft${stageArrow}<br>
+            ${horizonsLine}
             <span style="color:#fb923c">🔥 Wildfire:</span> Zone ${p.wildfire_zone || 'none'} · ${p.dist_to_fire_km}km to fire<br>
             <span style="color:#c084fc">🌍 Seismic:</span> PGA ${p.seismic_pga_g}g · ${p.seismic_damage}<br>
             <span style="color:#94a3b8">Edge Weight:</span> ${p.edge_weight}<br>
             <span style="color:#475569;font-size:10px">${p.updated_at}</span>
           </div>
-        `, { maxWidth: 280 });
+        `, { maxWidth: Math.min(280, window.innerWidth * 0.9) });
         mhrmGroup.addLayer(circle);
       }
 
@@ -282,7 +335,7 @@ export default function MapView({ mhrm, routes, hazardVisibility, region }) {
           ${isTrigger ? `<span style="color:#ef4444">${p.alert_message}</span>` : '✅ Clear'}
         </div>
       `;
-      line.bindPopup(popupContent, { maxWidth: 260 });
+      line.bindPopup(popupContent, { maxWidth: Math.min(260, window.innerWidth * 0.9) });
 
       // Origin / destination markers
       if (latLngs.length > 0 && p.route_type === 'primary') {
@@ -305,6 +358,55 @@ export default function MapView({ mhrm, routes, hazardVisibility, region }) {
       try { map.fitBounds(bounds, { padding: [40, 40] }); } catch (_) {}
     }
   }, [routes]);
+
+  // Demo flood flash marker (Fix 6) — flashes red/dark every 800ms at the
+  // demo's flooded segment while active. Tries to cross-reference the MHRM
+  // feature by segment name; falls back to a fixed marker near the pill's
+  // region center if no clean match is found (best-effort, POC-level).
+  useEffect(() => {
+    const map = leafletRef.current;
+    if (!map) return;
+
+    const clearDemoMarker = () => {
+      if (demoIntervalRef.current) { clearInterval(demoIntervalRef.current); demoIntervalRef.current = null; }
+      if (demoMarkerRef.current)   { demoMarkerRef.current.remove(); demoMarkerRef.current = null; }
+    };
+
+    if (!demoState?.active) { clearDemoMarker(); return; }
+
+    const segmentName = demoState.segment || demoState.reroute?.reason;
+    let coords = null;
+    if (segmentName && mhrm?.features?.length) {
+      const match = mhrm.features.find(f =>
+        f.properties?.name && segmentName.toLowerCase().includes(f.properties.name.toLowerCase())
+      );
+      if (match?.geometry?.coordinates) {
+        const [lon, lat] = match.geometry.coordinates;
+        coords = [lat, lon];
+      }
+    }
+    // Fallback: fixed marker at the active pill's center if no MHRM cross-reference found.
+    if (!coords) {
+      const cfg = REGION_PILLS[demoState.region?.toUpperCase?.()] || REGION_PILLS.CA;
+      coords = cfg.center;
+    }
+
+    clearDemoMarker();
+    const marker = L.circleMarker(coords, {
+      radius: 16, color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.6, weight: 3,
+    }).bindTooltip(`🚨 ${segmentName || 'Flood event'}`, { permanent: false });
+    marker.addTo(map);
+    demoMarkerRef.current = marker;
+
+    let toggled = false;
+    demoIntervalRef.current = setInterval(() => {
+      toggled = !toggled;
+      const color = toggled ? '#1f2937' : '#ef4444';
+      marker.setStyle({ color, fillColor: color });
+    }, 800);
+
+    return clearDemoMarker;
+  }, [demoState, mhrm]);
 
   return (
     <div

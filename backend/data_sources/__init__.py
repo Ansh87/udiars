@@ -4,6 +4,7 @@ from .noaa_mrms import NOAAMRMSClient
 from .nasa_firms import NASAFIRMSClient
 from .usgs_earthquake import USGSEarthquakeClient
 from .open_meteo import OpenMeteoClient
+from .facilities import get_facilities
 
 __all__ = [
     "USGSNWISClient",
@@ -11,4 +12,5 @@ __all__ = [
     "NASAFIRMSClient",
     "USGSEarthquakeClient",
     "OpenMeteoClient",
+    "get_facilities",
 ]

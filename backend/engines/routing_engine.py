@@ -20,6 +20,29 @@ from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
+# ── Traffic density / edge weight constants (Fix 8.1) ──────────────────────
+# w(e,t) = T_nominal × (1 + ALPHA_TRAFFIC·TrafficDensity) + BETA_HAZARD·HazardPenalty
+ALPHA_TRAFFIC = 0.5
+BETA_HAZARD = 5.0
+
+
+def traffic_density_for_hour(hour: int) -> float:
+    """
+    Time-of-day traffic density proxy in [0, 1].
+    POC simplification: uses datetime.utcnow().hour directly — true
+    regional-local-time conversion (per state/timezone) is out of scope.
+    """
+    if 6 <= hour < 9:
+        return 0.75
+    if 9 <= hour < 16:
+        return 0.35
+    if 16 <= hour < 19:
+        return 0.85
+    if 19 <= hour < 22:
+        return 0.20
+    return 0.05
+
+
 try:
     import osmnx as ox
     import networkx as nx
@@ -136,10 +159,12 @@ class RoutingEngine:
             hp = penalty_map.get((n_lat, n_lon), 0.0)
             length_km = data.get("length", 500) / 1000
             t_nominal = length_km / 50  # 50 km/h average speed
-            traffic = 0.3
-            w = t_nominal * (1 + 0.5 * traffic) + 5.0 * hp
+            # Fix 8.1: time-of-day traffic density proxy instead of a hardcoded value.
+            traffic = traffic_density_for_hour(datetime.utcnow().hour)
+            w = t_nominal * (1 + ALPHA_TRAFFIC * traffic) + BETA_HAZARD * hp
             self.graph[u][v][k]["udiars_weight"] = w
             self.graph[u][v][k]["hazard_penalty"] = hp
+            self.graph[u][v][k]["traffic_density"] = traffic
 
     # ------------------------------------------------------------------
     # Route computation

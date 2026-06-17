@@ -1,8 +1,7 @@
 /**
  * ControlPanel — origin/destination geocoder, hazard toggles, demo controls.
  */
-import React, { useState } from 'react';
-import StateSelector from './StateSelector';
+import React, { useState, useEffect } from 'react';
 import { PRESET_GROUPS } from '../constants/appData';
 
 async function geocodeAddress(query) {
@@ -28,6 +27,11 @@ export default function ControlPanel({
   lastUpdated,
   region,
   onRegionChange,
+  regionPill = 'CA',
+  onRegionPillChange,
+  subFocus = 'BOTH',
+  onSubFocusChange,
+  isMobile = false,
   onOpenHelp,
   onOpenTips,
   onOpenReadMe,
@@ -48,12 +52,56 @@ export default function ControlPanel({
     try {
       await onRouteCompute(
         parseFloat(originLat), parseFloat(originLng),
-        parseFloat(destLat),   parseFloat(destLng)
+        parseFloat(destLat),   parseFloat(destLng),
+        regionPill
       );
     } finally {
       setComputing(false);
     }
   };
+
+  // Demo button label/handler vary by active region pill (Fix 3 sub-item 5)
+  const DEMO_CONFIG = {
+    CA:   { label: '🎬 Demo: US-101 Flood (Ventura→SLO)' },
+    NJNY: { label: '🎬 Demo: Raritan Flood (New Brunswick NJ)' },
+    ALL:  { label: '🎬 Demo: Multi-State Flood Event' },
+  };
+  const demoCfg = DEMO_CONFIG[regionPill] || DEMO_CONFIG.CA;
+  const handleDemoStart = () => onDemoStart(regionPill);
+
+  // Live countdown for demo auto-reset (Fix 6) — belt-and-suspenders UI
+  // feedback only; the backend is the source of truth and auto-resets
+  // server-side after 60s regardless of this client-side timer.
+  const [secondsLeft, setSecondsLeft] = useState(null);
+  useEffect(() => {
+    if (!demoState?.active) { setSecondsLeft(null); return; }
+    setSecondsLeft(demoState.reset_in_seconds ?? 58);
+    const interval = setInterval(() => {
+      setSecondsLeft(s => {
+        if (s === null) return null;
+        if (s <= 1) {
+          clearInterval(interval);
+          onDemoStop?.();
+          return 0;
+        }
+        return s - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [demoState?.active, demoState?.reset_in_seconds]);
+
+  // Offline confidence indicator (Fix 9) — ticks every 5s since it's time-based.
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 5000);
+    return () => clearInterval(interval);
+  }, []);
+  const secondsSinceRefresh = lastUpdated ? (now - new Date(lastUpdated).getTime()) / 1000 : null;
+  const confidence = secondsSinceRefresh === null ? null
+    : secondsSinceRefresh > 180 ? 'LOW'
+    : secondsSinceRefresh > 90  ? 'MED'
+    : 'HIGH';
 
   const handleGeocode = async (which) => {
     const query = which === 'origin' ? originAddr : destAddr;
@@ -98,6 +146,15 @@ export default function ControlPanel({
     setShowPresets(false);
   };
 
+  // Filter preset groups by active region pill (Fix 4): CA shows LA+SF groups,
+  // NJNY shows NY+NJ groups, ALL shows everything grouped by state label.
+  const visiblePresetGroups = PRESET_GROUPS.filter(group => {
+    if (regionPill === 'ALL') return true;
+    if (regionPill === 'CA') return group.region === 'CA';
+    if (regionPill === 'NJNY') return group.region === 'NY' || group.region === 'NJ';
+    return true;
+  });
+
   const inputStyle = {
     background: '#1a2942',
     border: '1px solid #2d4a6e',
@@ -129,11 +186,11 @@ export default function ControlPanel({
           <div style={{ fontWeight: 700, fontSize: 15, letterSpacing: '0.02em' }}>
             🛡 UDIARS
           </div>
-          <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 1 }}>
-            Unified Disaster Intelligence &amp; Adaptive Response System
+          <div style={{ fontSize: 10, fontWeight: 600, color: '#94a3b8', marginTop: 1 }}>
+            UNIFIED DISASTER INTELLIGENCE AND ADAPTIVE RESPONSE SYSTEM
           </div>
           <div style={{ fontSize: 10, color: '#475569', marginTop: 1 }}>
-            POC Region: California, New York and New Jersey
+            POC Regions: California &middot; New Jersey / New York
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
@@ -147,14 +204,72 @@ export default function ControlPanel({
         </div>
       </div>
 
-      {/* Region selector + info buttons */}
+      {/* Region pills (Fix 3) — replaces the old single StateSelector dropdown */}
+      <div style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
+        {[
+          { id: 'CA',   label: 'California' },
+          { id: 'NJNY', label: 'New Jersey / New York' },
+          { id: 'ALL',  label: 'All Regions' },
+        ].map(p => {
+          const active = regionPill === p.id;
+          return (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => onRegionPillChange?.(p.id)}
+              className="btn btn-secondary"
+              style={{
+                flex: 1, fontSize: 11, padding: '6px 6px', minHeight: 32,
+                justifyContent: 'center',
+                background: active ? '#1e4080' : '#1a2942',
+                border: `1px solid ${active ? '#3b82f6' : '#2d4a6e'}`,
+                color: active ? '#60a5fa' : '#94a3b8',
+                fontWeight: active ? 700 : 400,
+              }}
+            >
+              {p.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Sub-state focus — desktop only, only shown when NJNY pill is active */}
+      {!isMobile && regionPill === 'NJNY' && (
+        <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
+          {[
+            { id: 'NJ',   label: 'Focus: New Jersey' },
+            { id: 'NY',   label: 'Focus: New York' },
+            { id: 'BOTH', label: 'Show Both' },
+          ].map(f => {
+            const active = subFocus === f.id;
+            return (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => onSubFocusChange?.(f.id)}
+                className="btn btn-secondary"
+                style={{
+                  flex: 1, fontSize: 10, padding: '4px 4px', minHeight: 28,
+                  justifyContent: 'center',
+                  background: active ? '#1e4080' : '#1a2942',
+                  border: `1px solid ${active ? '#3b82f6' : '#2d4a6e'}`,
+                  color: active ? '#60a5fa' : '#94a3b8',
+                  fontWeight: active ? 700 : 400,
+                }}
+              >
+                {f.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Info buttons */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 10, alignItems: 'center' }}>
-        <span style={{ fontSize: 11, color: '#64748b' }}>State:</span>
-        <StateSelector value={region} onChange={onRegionChange} compact />
         <div style={{ flex: 1 }} />
-        <button onClick={onOpenHelp} className="btn btn-secondary" title="Emergency hotlines" style={{ fontSize: 11, padding: '4px 8px' }}>📞 Help</button>
-        <button onClick={onOpenTips} className="btn btn-secondary" title="Emergency tips" style={{ fontSize: 11, padding: '4px 8px' }}>🧭 Tips</button>
-        <button onClick={onOpenReadMe} className="btn btn-secondary" title="How this app works" style={{ fontSize: 11, padding: '4px 8px' }}>📖</button>
+        <button onClick={onOpenHelp} className="btn btn-secondary" title="Emergency hotlines" style={{ fontSize: 11, padding: '4px 8px', minHeight: 32 }}>📞 Help</button>
+        <button onClick={onOpenTips} className="btn btn-secondary" title="Emergency tips" style={{ fontSize: 11, padding: '4px 8px', minHeight: 32 }}>🧭 Tips</button>
+        <button onClick={onOpenReadMe} className="btn btn-secondary" title="How this app works" style={{ fontSize: 11, padding: '4px 8px', minHeight: 32 }}>📖</button>
       </div>
 
       {/* Routing inputs */}
@@ -207,7 +322,7 @@ export default function ControlPanel({
               onClick={() => togglePresetMode(mode)}
               className="btn btn-secondary"
               style={{
-                flex: 1, fontSize: 11,
+                flex: 1, fontSize: 11, minHeight: 32,
                 outline: presetMode === mode && showPresets ? '1px solid #3b82f6' : 'none',
               }}
             >
@@ -227,12 +342,12 @@ export default function ControlPanel({
             <div style={{ fontSize: 10, color: '#64748b', marginBottom: 6 }}>
               SET {presetMode.toUpperCase()} →
             </div>
-            {PRESET_GROUPS.map(group => (
+            {visiblePresetGroups.map(group => (
               <div key={group.label} style={{ marginBottom: 8 }}>
                 <div style={{ fontSize: 11, color: '#3b82f6', marginBottom: 4 }}>{group.label} ({group.region})</div>
                 {group.items.map(p => (
                   <button key={p.label} type="button" onClick={() => applyPreset(p)}
-                    style={{ display: 'block', width: '100%', textAlign: 'left', background: 'transparent', border: 'none', color: '#94a3b8', fontSize: 11, padding: '3px 0', cursor: 'pointer' }}>
+                    style={{ display: 'block', width: '100%', textAlign: 'left', background: 'transparent', border: 'none', color: '#94a3b8', fontSize: 11, padding: '6px 0', minHeight: 28, cursor: 'pointer' }}>
                     → {p.label}
                   </button>
                 ))}
@@ -268,6 +383,7 @@ export default function ControlPanel({
               onClick={() => onHazardToggle(layer.key)}
               style={{
                 padding: '4px 10px',
+                minHeight: 32,
                 borderRadius: 5,
                 border: `1px solid ${hazardVisibility[layer.key] ? layer.color : '#2d4a6e'}`,
                 background: hazardVisibility[layer.key] ? `${layer.color}22` : '#1a2942',
@@ -288,25 +404,25 @@ export default function ControlPanel({
         <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
           {!demoState?.active ? (
             <button
-              onClick={onDemoStart}
+              onClick={handleDemoStart}
               className="btn btn-danger"
-              style={{ flex: 1, justifyContent: 'center', fontSize: 12 }}
+              style={{ flex: 1, justifyContent: 'center', fontSize: 12, minHeight: 36 }}
             >
-              🎬 Demo: LA-101 Flood
+              {demoCfg.label}
             </button>
           ) : (
             <button
               onClick={onDemoStop}
               className="btn btn-success"
-              style={{ flex: 1, justifyContent: 'center', fontSize: 12 }}
+              style={{ flex: 1, justifyContent: 'center', fontSize: 12, minHeight: 36 }}
             >
               ✅ Stop Demo
             </button>
           )}
           <button
-            onClick={onForceRefresh}
+            onClick={() => onForceRefresh(regionPill)}
             className="btn btn-secondary"
-            style={{ fontSize: 12, padding: '6px 10px' }}
+            style={{ fontSize: 12, padding: '6px 10px', minHeight: 36, minWidth: 44 }}
             title="Force data refresh"
           >
             🔄
@@ -314,12 +430,17 @@ export default function ControlPanel({
         </div>
         {demoState?.active && (
           <div style={{ marginTop: 6, fontSize: 11, color: '#fca5a5', padding: '5px 8px', background: 'rgba(127,29,29,0.3)', borderRadius: 5 }}>
-            🟤 Demo active: LA-101 flood scenario running
+            🟤 Demo active — auto-reset in {secondsLeft ?? '--'}s
           </div>
         )}
         {lastUpdated && (
           <div style={{ marginTop: 6, fontSize: 10, color: '#475569', textAlign: 'center' }}>
             Last refresh: {new Date(lastUpdated).toLocaleTimeString()}
+          </div>
+        )}
+        {confidence && confidence !== 'HIGH' && (
+          <div style={{ marginTop: 4, fontSize: 10, color: confidence === 'LOW' ? '#f87171' : '#fbbf24', textAlign: 'center' }}>
+            ⚠️ Data stale — last update {Math.round(secondsSinceRefresh)}s ago · Confidence: {confidence}
           </div>
         )}
       </div>

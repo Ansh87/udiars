@@ -24,30 +24,62 @@ export const STATE_CONFIG = {
 
 export const REGION_ORDER = ['CA', 'NY', 'NJ'];
 
+// Pill-level region config (Fix 3) — distinct from per-state STATE_CONFIG above,
+// which is still used for sub-state focus (NJ/NY individually).
+export const REGION_PILLS = {
+  CA:   { id: 'CA',   label: 'California',            center: [36.7783, -119.4179], zoom: 6 },
+  NJNY: { id: 'NJNY', label: 'New Jersey / New York',  center: [41.2033, -74.5894], zoom: 7 },
+  ALL:  { id: 'ALL',  label: 'All Regions',            center: [39.5, -98.35],       zoom: 4 },
+};
+
+// Sub-state focus targets, shown only when NJNY pill is active (desktop only)
+export const SUB_FOCUS = {
+  NJ:   { center: [40.0583, -74.4057], zoom: 8 },
+  NY:   { center: [42.9538, -75.5268], zoom: 7 },
+  BOTH: { center: [41.2033, -74.5894], zoom: 7 },
+};
+
+// Maps internal pill values to backend `?region=` query param values
+export const REGION_PARAM_MAP = { CA: 'california', NJNY: 'njny', ALL: 'all' };
+
 // Location presets grouped by region (used in Origin/Dest pickers)
 export const LA_PRESETS = [
-  { label: 'LA Union Station',  lat: 34.0560, lng: -118.2356 },
-  { label: 'Santa Monica Pier', lat: 34.0085, lng: -118.4985 },
-  { label: 'LAX Airport',       lat: 33.9425, lng: -118.4081 },
-  { label: 'Pasadena City Hall',lat: 34.1478, lng: -118.1445 },
+  { label: 'LA Union Station',   lat: 34.0560, lng: -118.2356 },
+  { label: 'Santa Monica Pier',  lat: 34.0100, lng: -118.4965 },
+  { label: 'LAX Airport',        lat: 33.9425, lng: -118.4081 },
+  { label: 'Pasadena City Hall', lat: 34.1478, lng: -118.1445 },
+  { label: 'Dodger Stadium',     lat: 34.0739, lng: -118.2400 },
 ];
 export const SF_PRESETS = [
-  { label: 'SF Civic Center',   lat: 37.7793, lng: -122.4193 },
-  { label: 'SFO Airport',       lat: 37.6213, lng: -122.3790 },
-  { label: 'Oakland City Hall', lat: 37.8044, lng: -122.2711 },
-  { label: 'Berkeley UC',       lat: 37.8724, lng: -122.2595 },
-];
-export const NY_PRESETS = [
-  { label: 'Times Square',        lat: 40.7580, lng: -73.9855 },
-  { label: 'JFK Airport',         lat: 40.6413, lng: -73.7781 },
-  { label: 'Albany Capitol',      lat: 42.6526, lng: -73.7562 },
-  { label: 'Buffalo City Hall',   lat: 42.8864, lng: -78.8784 },
+  { label: 'SF Civic Center',    lat: 37.7793, lng: -122.4193 },
+  { label: 'SFO Airport',        lat: 37.6213, lng: -122.3790 },
+  { label: 'Oakland City Hall',  lat: 37.8044, lng: -122.2712 },
+  { label: 'Berkeley UC',        lat: 37.8724, lng: -122.2595 },
+  { label: 'Golden Gate Bridge', lat: 37.8199, lng: -122.4783 },
 ];
 export const NJ_PRESETS = [
-  { label: 'Newark Penn Station', lat: 40.7342, lng: -74.1645 },
-  { label: 'Liberty State Park',  lat: 40.7090, lng: -74.0568 },
-  { label: 'Trenton State House', lat: 40.2206, lng: -74.7597 },
-  { label: 'Atlantic City Boardwalk', lat: 39.3643, lng: -74.4229 },
+  { label: 'South Brunswick Twp',    lat: 40.3676, lng: -74.5311 },
+  { label: 'Rutgers University',     lat: 40.5008, lng: -74.4474 },
+  { label: 'Newark Airport',         lat: 40.6895, lng: -74.1745 },
+  { label: 'Princeton University',   lat: 40.3431, lng: -74.6551 },
+  { label: 'Hoboken Terminal',       lat: 40.7359, lng: -74.0244 },
+  { label: 'New Brunswick Station',  lat: 40.4871, lng: -74.4430 },
+  { label: 'Trenton City Hall',      lat: 40.2170, lng: -74.7429 },
+  { label: 'Raritan River Gauge',    lat: 40.5676, lng: -74.5694 },
+  { label: 'Atlantic City Conv Ctr', lat: 39.3643, lng: -74.4229 },
+  { label: 'Meadowlands Stadium',    lat: 40.8135, lng: -74.0745 },
+];
+export const NY_PRESETS = [
+  { label: 'NYC Penn Station',      lat: 40.7506, lng: -73.9971 },
+  { label: 'JFK Airport',           lat: 40.6413, lng: -73.7781 },
+  { label: 'LaGuardia Airport',     lat: 40.7769, lng: -73.8740 },
+  { label: 'Brooklyn Bridge',       lat: 40.7061, lng: -73.9969 },
+  { label: 'Yankee Stadium',        lat: 40.8296, lng: -73.9262 },
+  { label: 'Albany City Hall',      lat: 42.6526, lng: -73.7562 },
+  { label: 'Buffalo City Hall',     lat: 42.8864, lng: -78.8784 },
+  { label: 'West Point Academy',    lat: 41.3915, lng: -73.9571 },
+  { label: 'Syracuse Hancock Intl', lat: 43.1112, lng: -76.1063 },
+  { label: 'Rochester Airport',     lat: 43.1189, lng: -77.6724 },
 ];
 
 export const PRESET_GROUPS = [
