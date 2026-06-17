@@ -95,11 +95,14 @@ body {
 .pulse-brown { animation: pulse-brown 1.5s ease-in-out infinite; }
 
 /* Bright map place labels (CartoDB dark_only_labels overlay).
-   Brightness alone pushes labels to white; contrast is intentionally left
-   near 1 because boosting it thickens anti-aliased glyph edges and makes
-   text look unnaturally bold. */
+   A high brightness multiplier (previously 2.2) pushes the anti-aliased
+   gray pixels at glyph edges all the way to white, which widens the
+   apparent stroke and reads as bold even with contrast left at 1.0.
+   Using a more moderate brightness boost plus a slight contrast trim
+   keeps city names legible against the dark basemap without the
+   thickened/bold look. */
 .bright-map-labels {
-  filter: brightness(2.2) contrast(1.0);
+  filter: brightness(1.5) contrast(0.9);
 }
 
 @keyframes blink {

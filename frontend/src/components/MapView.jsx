@@ -35,6 +35,46 @@ function stageDirection(stageRate) {
   return ' → Stable';
 }
 
+// Initial bearing (degrees, 0=North, clockwise) from [lat1,lng1] to [lat2,lng2].
+// Used to rotate the route direction-arrow markers so they actually point
+// the way the route travels, rather than just being decorative weight.
+function bearingDeg([lat1, lng1], [lat2, lng2]) {
+  const toRad = d => d * Math.PI / 180;
+  const toDeg = r => r * 180 / Math.PI;
+  const y = Math.sin(toRad(lng2 - lng1)) * Math.cos(toRad(lat2));
+  const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
+            Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(toRad(lng2 - lng1));
+  return (toDeg(Math.atan2(y, x)) + 360) % 360;
+}
+
+// Places rotated arrow glyphs along a polyline so the route's direction of
+// travel is visible at a glance (the previous code only bumped line weight
+// for the primary route despite a comment claiming "animated arrows" —
+// no arrow ever rendered, which is the "direction is not working" bug).
+function addDirectionArrows(latLngs, color, targetGroup, maxArrows = 6) {
+  if (!latLngs || latLngs.length < 2) return;
+  const step = Math.max(1, Math.floor(latLngs.length / (maxArrows + 1)));
+  for (let i = step; i < latLngs.length - 1; i += step) {
+    const from = latLngs[i - 1];
+    const to = latLngs[i];
+    const angle = bearingDeg(from, to);
+    const icon = L.divIcon({
+      className: 'route-direction-arrow',
+      html: `<div style="
+        width:0;height:0;
+        transform: rotate(${angle}deg);
+        border-left:6px solid transparent;
+        border-right:6px solid transparent;
+        border-bottom:11px solid ${color};
+        filter: drop-shadow(0 0 2px rgba(0,0,0,0.6));
+      "></div>`,
+      iconSize: [12, 12],
+      iconAnchor: [6, 6],
+    });
+    L.marker(to, { icon, interactive: false }).addTo(targetGroup);
+  }
+}
+
 // Fix Leaflet's default icon paths broken by webpack
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -322,10 +362,12 @@ export default function MapView({ mhrm, routes, hazardVisibility, region, region
 
       const line = L.polyline(latLngs, style);
 
-      // Add animated arrows for primary route
+      // Primary route renders thicker, plus all routes get rotated arrow
+      // glyphs along their length so direction of travel is visible.
       if (p.route_type === 'primary') {
         line.setStyle({ weight: 6 });
       }
+      addDirectionArrows(latLngs, style.color, routeGroup, p.route_type === 'primary' ? 8 : 5);
 
       const popupContent = `
         <div style="font-family:monospace;font-size:12px">

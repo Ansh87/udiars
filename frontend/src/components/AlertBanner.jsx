@@ -213,8 +213,14 @@ export default function AlertBanner({ demoState, hazards, routes, regionPill, co
     );
   }
 
+  // NOTE: previously `position: absolute` here floated the banner over the
+  // entire viewport (it has no positioned ancestor to anchor against), which
+  // visually overlapped the top of ControlPanel whenever 1+ alerts were
+  // active — exactly the "left panels overlapping" bug. Using normal flow
+  // (`position: relative`) keeps the same look but makes the map/sidebar row
+  // below it reserve space instead of sitting underneath it.
   return (
-    <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 2000, display: 'flex', flexDirection: 'column', gap: 2 }}>
+    <div style={{ position: 'relative', zIndex: 2000, display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0 }}>
       {visible.slice(0, 4).map(alert => {
         const sev = SEVERITY_STYLES[alert.severity] || SEVERITY_STYLES.watch;
         const ts = renderTimestamp(alert);
